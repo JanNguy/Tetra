@@ -13,6 +13,7 @@ A lightweight desktop app to create and run a local mock API.
 * View request & response logs
 * Start/stop the server from the UI
 * Local config persistence
+* Podman runtime
 
 ---
 
@@ -20,6 +21,7 @@ A lightweight desktop app to create and run a local mock API.
 
 * Node.js
 * pnpm → https://pnpm.io/fr/installation
+* Podman → https://podman.io/docs/installation
 
 ---
 
@@ -53,7 +55,7 @@ Example:
 
 ```json
 {
-  "status": "ok"
+    "status": "ok"
 }
 ```
 
@@ -62,6 +64,70 @@ Test it:
 ```bash
 curl http://localhost:3000/api/health
 ```
+
+---
+
+## Tutorial: Podman runtime
+
+### 1) Install and start Podman
+
+Check installation:
+
+```bash
+podman --version
+```
+
+On macOS, initialize and start the Podman machine (first time only):
+
+```bash
+podman machine init
+podman machine start
+```
+
+### 2) Verify Podman is ready
+
+```bash
+podman info
+```
+
+If this command works, Tetra can use Podman runtime.
+
+### 3) Enable Podman runtime in Tetra
+
+1. Open **Tetra**
+2. Go to runtime/server settings
+3. Select **Podman runtime**
+4. Start the server
+
+### 4) Validate with a route
+
+Create:
+
+* `GET /api/health`
+* Response:
+
+```json
+{
+    "status": "ok"
+}
+```
+
+Test:
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+### 5) Troubleshooting
+
+If runtime fails:
+
+```bash
+podman machine stop
+podman machine start
+```
+
+Then restart Tetra and try again.
 
 ---
 
@@ -94,3 +160,4 @@ pnpm dist    # build dmg
 * React
 * Express
 * Tailwind
+
