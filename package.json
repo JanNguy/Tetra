@@ -1,0 +1,57 @@
+{
+  "name": "Tetra",
+  "version": "1.0.0",
+  "description": "Tetra app",
+  "main": "main.js",
+  "author": "Jan Nguyen",
+  "license": "GNU",
+  "scripts": {
+    "build:renderer": "esbuild ./src/renderer/src/main.tsx --bundle --platform=browser --format=iife --outfile=./src/renderer/dist/renderer.js --jsx=automatic",
+    "start": "pnpm tailwind:build && pnpm build:renderer && electron .",
+    "dist": "pnpm tailwind:build && pnpm build:renderer && electron-builder",
+    "dev": "pnpm start",
+    "tailwind:build": "tailwindcss -i ./src/renderer/src/tailwind.css -o ./src/renderer/src/tailwind.generated.css",
+    "tailwind:watch": "tailwindcss -i ./src/renderer/src/tailwind.css -o ./src/renderer/src/tailwind.generated.css --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "react": "19.2.1",
+    "react-dom": "19.2.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.4",
+    "autoprefixer": "^10.5.0",
+    "daisyui": "^5.5.19",
+    "electron": "41.2.2",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "build": {
+    "appId": "com.tetra.app",
+    "productName": "Tetra",
+    "mac": {
+      "target": "dmg",
+      "identity": null
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "src/renderer/dist/**/*",
+      "src/renderer/src/tailwind.generated.css"
+    ]
+  }
+}
