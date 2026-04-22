@@ -3,9 +3,9 @@ const cors = require('cors');
 const net = require('net');
 const { spawn } = require('child_process');
 
-let serverInstance = null;
-let podmanContainerName = null;
-let podmanLogsProcess = null;
+const localServers = new Map();
+const podmanContainers = new Map();
+const podmanLogsProcesses = new Map();
 
 const PODMAN_IMAGE = 'docker.io/library/node:20-alpine';
 
@@ -15,41 +15,72 @@ function sanitizeHeader(value) {
   return value.replace(/[\r\n]/g, '');
 }
 
-function stopServer() {
+function normalizeProjectId(projectId) {
+  if (!projectId) return 'default';
+  return String(projectId).replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+function hasRunningServer(projectId) {
+  return localServers.has(projectId) || podmanContainers.has(projectId);
+}
+
+function stopPodmanLogs(projectId) {
+  const process = podmanLogsProcesses.get(projectId);
+  if (process) {
+    process.kill();
+    podmanLogsProcesses.delete(projectId);
+  }
+}
+
+async function stopProjectServer(projectId) {
+  const normalizedProjectId = normalizeProjectId(projectId);
+
+  const localServer = localServers.get(normalizedProjectId);
+  if (localServer) {
+    await new Promise(resolve => {
+      localServer.close(() => resolve(true));
+    });
+    localServers.delete(normalizedProjectId);
+  }
+
+  stopPodmanLogs(normalizedProjectId);
+
+  const containerName = podmanContainers.get(normalizedProjectId);
+  if (containerName) {
+    try {
+      await runPodmanCommand(['rm', '-f', containerName]);
+    } catch (err) {
+      // Best effort cleanup if container already stopped.
+    } finally {
+      podmanContainers.delete(normalizedProjectId);
+    }
+  }
+}
+
+function stopServer(projectId) {
   return new Promise(async (resolve) => {
-    if (serverInstance) {
-      await new Promise(closeResolve => {
-        serverInstance.close(() => {
-          serverInstance = null;
-          closeResolve(true);
-        });
-      });
+    if (projectId) {
+      await stopProjectServer(projectId);
+      resolve(true);
+      return;
     }
 
-    if (podmanLogsProcess) {
-      podmanLogsProcess.kill();
-      podmanLogsProcess = null;
-    }
+    const projectIds = new Set([
+      ...localServers.keys(),
+      ...podmanContainers.keys(),
+      ...podmanLogsProcesses.keys(),
+    ]);
 
-    if (podmanContainerName) {
-      try {
-        await runPodmanCommand(['rm', '-f', podmanContainerName]);
-      } catch (err) {
-        // Best effort cleanup if container has already stopped.
-      } finally {
-        podmanContainerName = null;
-      }
+    for (const id of projectIds) {
+      await stopProjectServer(id);
     }
 
     resolve(true);
   });
 }
 
-function followPodmanLogs(containerName, onLog) {
-  if (podmanLogsProcess) {
-    podmanLogsProcess.kill();
-    podmanLogsProcess = null;
-  }
+function followPodmanLogs(projectId, containerName, onLog) {
+  stopPodmanLogs(projectId);
 
   const child = spawn('podman', ['logs', '-f', containerName], {
     stdio: ['ignore', 'pipe', 'pipe']
@@ -64,21 +95,21 @@ function followPodmanLogs(containerName, onLog) {
 
     lines.forEach((line) => {
       if (line.startsWith('REQ ')) {
-        onLog('request', line.slice(4));
+        onLog('request', line.slice(4), projectId);
         return;
       }
 
       if (line.startsWith('RES ')) {
-        onLog('response', line.slice(4));
+        onLog('response', line.slice(4), projectId);
         return;
       }
 
       if (line.startsWith('ERR ')) {
-        onLog('error', line.slice(4));
+        onLog('error', line.slice(4), projectId);
         return;
       }
 
-      onLog('info', `[podman] ${line}`);
+      onLog('info', `[podman] ${line}`, projectId);
     });
   };
 
@@ -86,20 +117,22 @@ function followPodmanLogs(containerName, onLog) {
   child.stderr.on('data', handleChunk);
 
   child.on('error', () => {
-    onLog('error', 'Failed to follow Podman logs.');
+    onLog('error', 'Failed to follow Podman logs.', projectId);
   });
 
   child.on('close', () => {
-    if (podmanLogsProcess === child) {
-      podmanLogsProcess = null;
+    if (podmanLogsProcesses.get(projectId) === child) {
+      podmanLogsProcesses.delete(projectId);
     }
   });
 
-  podmanLogsProcess = child;
+  podmanLogsProcesses.set(projectId, child);
 }
 
-function startServer(port, settings, routes, onLog) {
+function startServer(projectId, port, settings, routes, onLog) {
   return new Promise((resolve, reject) => {
+    const normalizedProjectId = normalizeProjectId(projectId);
+
     // Basic validation
     if (typeof port !== 'number' || isNaN(port) || port <= 0 || port > 65535) {
       return reject(new Error('Invalid port number'));
@@ -114,25 +147,25 @@ function startServer(port, settings, routes, onLog) {
     const runtime = settings.runtime === 'podman' ? 'podman' : 'local';
 
     const start = () => {
-      onLog('info', `Starting server (${runtime}) on port ${port}...`);
+      onLog('info', `Starting server (${runtime}) on port ${port}...`, normalizedProjectId);
 
       if (runtime === 'podman') {
-        createPodmanServer(port, settings, routes, onLog, resolve, reject);
+        createPodmanServer(normalizedProjectId, port, settings, routes, onLog, resolve, reject);
         return;
       }
 
-      createExpressServer(port, settings, routes, onLog, resolve, reject);
+      createExpressServer(normalizedProjectId, port, settings, routes, onLog, resolve, reject);
     };
 
-    if (serverInstance || podmanContainerName) {
-      onLog('info', 'Stopping previous server instance...');
-      stopServer()
+    if (hasRunningServer(normalizedProjectId)) {
+      onLog('info', 'Stopping previous server instance...', normalizedProjectId);
+      stopProjectServer(normalizedProjectId)
         .then(async () => {
-          onLog('info', 'Waiting for port to be released...');
+          onLog('info', 'Waiting for port to be released...', normalizedProjectId);
           try {
             await waitForPortRelease(port, 8000, 200);
           } catch (err) {
-            onLog('error', `Port release wait failed: ${err.message}`);
+            onLog('error', `Port release wait failed: ${err.message}`, normalizedProjectId);
           }
           start();
         })
@@ -158,7 +191,7 @@ async function waitForPortRelease(port, timeoutMs = 8000, intervalMs = 200) {
   throw new Error(`Timed out waiting for port ${port} release`);
 }
 
-function createExpressServer(port, settings, routes, onLog, resolve, reject) {
+function createExpressServer(projectId, port, settings, routes, onLog, resolve, reject) {
   const expressApp = express();
 
   if (settings.corsEnabled) {
@@ -171,7 +204,7 @@ function createExpressServer(port, settings, routes, onLog, resolve, reject) {
 
   if (settings.logRequests) {
     expressApp.use((req, res, next) => {
-      onLog('request', `${req.method} ${req.url}`);
+      onLog('request', `${req.method} ${req.url}`, projectId);
       next();
     });
   }
@@ -194,7 +227,7 @@ function createExpressServer(port, settings, routes, onLog, resolve, reject) {
       expressApp[method](route.path, (req, res) => {
         const sendResponse = () => {
           if (settings.logResponses) {
-            onLog('response', `${route.statusCode} OK - (route: ${route.path})`);
+            onLog('response', `${route.statusCode} OK - (route: ${route.path})`, projectId);
           }
 
           if (route.headers && typeof route.headers === 'object') {
@@ -228,13 +261,24 @@ function createExpressServer(port, settings, routes, onLog, resolve, reject) {
   });
 
   try {
-    serverInstance = expressApp.listen(port, () => {
-      onLog('info', `Server started on port ${port}`);
+    const serverInstance = expressApp.listen(port, () => {
+      onLog('info', `Server started on port ${port}`, projectId);
       resolve(true);
+    });
+
+    localServers.set(projectId, serverInstance);
+
+    serverInstance.on('close', () => {
+      if (localServers.get(projectId) === serverInstance) {
+        localServers.delete(projectId);
+      }
     });
     
     serverInstance.on('error', (err) => {
-      onLog('error', `Server Error: ${err.message}`);
+      onLog('error', `Server Error: ${err.message}`, projectId);
+      if (localServers.get(projectId) === serverInstance) {
+        localServers.delete(projectId);
+      }
       reject(err);
     });
   } catch (err) {
@@ -382,8 +426,8 @@ server.listen(port, '0.0.0.0');
 `;
 }
 
-function createPodmanServer(port, settings, routes, onLog, resolve, reject) {
-  const containerName = `tetra-mock-${port}-${Date.now()}`;
+function createPodmanServer(projectId, port, settings, routes, onLog, resolve, reject) {
+  const containerName = `tetra-${projectId}-${port}-${Date.now()}`;
   const script = buildPodmanServerScript();
 
   const args = [
@@ -408,9 +452,9 @@ function createPodmanServer(port, settings, routes, onLog, resolve, reject) {
 
   runPodmanCommand(args)
     .then(() => {
-      podmanContainerName = containerName;
-      onLog('info', `Server started with Podman on port ${port}`);
-      followPodmanLogs(containerName, onLog);
+      podmanContainers.set(projectId, containerName);
+      onLog('info', `Server started with Podman on port ${port}`, projectId);
+      followPodmanLogs(projectId, containerName, onLog);
       resolve(true);
     })
     .catch(err => {

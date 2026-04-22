@@ -6,12 +6,12 @@ const serverManager = require('./serverManager');
 function setupIpcHandlers(mainWindow) {
   
   // Helper to send logs to the frontend
-  const onLog = (type, message) => {
+  const onLog = (type, message, projectId = 'default') => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (type === 'error') {
-        mainWindow.webContents.send('server-error', { type, message });
+        mainWindow.webContents.send('server-error', { type, message, projectId });
       } else {
-        mainWindow.webContents.send('server-log', { type, message });
+        mainWindow.webContents.send('server-log', { type, message, projectId });
       }
     }
   };
@@ -19,9 +19,10 @@ function setupIpcHandlers(mainWindow) {
   ipcMain.handle('start-server', async (event, settings, routes) => {
     try {
       const port = settings && settings.port ? parseInt(settings.port) : null;
+      const projectId = settings && settings.projectId ? settings.projectId : 'default';
       if (!port) throw new Error('Invalid port');
       
-      await serverManager.startServer(port, settings, routes, onLog);
+      await serverManager.startServer(projectId, port, settings, routes, onLog);
       return true;
     } catch (err) {
       onLog('error', err.message);
@@ -29,13 +30,13 @@ function setupIpcHandlers(mainWindow) {
     }
   });
 
-  ipcMain.handle('stop-server', async () => {
+  ipcMain.handle('stop-server', async (event, projectId = 'default') => {
     try {
-      await serverManager.stopServer();
-      onLog('info', 'Server stopped');
+      await serverManager.stopServer(projectId);
+      onLog('info', 'Server stopped', projectId);
       return true;
     } catch (err) {
-      onLog('error', `Failed to stop server: ${err.message}`);
+      onLog('error', `Failed to stop server: ${err.message}`, projectId);
       throw err;
     }
   });
@@ -48,9 +49,10 @@ function setupIpcHandlers(mainWindow) {
   ipcMain.handle('restart-server', async (event, settings, routes) => {
     try {
       const port = settings && settings.port ? parseInt(settings.port) : null;
+      const projectId = settings && settings.projectId ? settings.projectId : 'default';
       if (!port) throw new Error('Invalid port');
       
-      await serverManager.startServer(port, settings, routes, onLog);
+      await serverManager.startServer(projectId, port, settings, routes, onLog);
       return true;
     } catch (err) {
       onLog('error', err.message);

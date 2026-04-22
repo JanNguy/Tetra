@@ -207,11 +207,14 @@ export default function Sidebar({
                 {filteredRoutes.map((route) => (
                     <button
                         key={route.id}
+                        title={`${route.method} ${route.path}`}
                         onClick={() => {
                             setSelectedRouteId(route.id);
                             setActiveTab('routes');
                         }}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg mb-1 transition-colors ${
+                        className={`w-full flex items-center p-3 rounded-lg mb-1 transition-colors ${
+                            sidebarCollapsed ? 'justify-center' : 'gap-3'
+                        } ${
                             selectedRouteId === route.id && activeTab === 'routes'
                                 ? ''
                                 : 'hover:bg-slate-700'
@@ -221,29 +224,48 @@ export default function Sidebar({
                                 selectedRouteId === route.id && activeTab === 'routes'
                                     ? colors.surface
                                     : 'transparent',
+                            minHeight: sidebarCollapsed ? '2.5rem' : 'auto',
                         }}
                     >
-                        <span
-                            className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                getMethodColor(route.method)
-                            }`}
-                        >
-                            {route.method}
-                        </span>
-                        {!sidebarCollapsed && (
-                            <span
-                                className="flex-1 text-left text-sm font-mono truncate"
-                                style={{ color: colors.textPrimary }}
-                            >
-                                {route.path}
-                            </span>
+                        {sidebarCollapsed ? (
+                            <div className="relative shrink-0 flex items-center justify-center">
+                                <span
+                                    className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-[10px] font-bold text-white ${getMethodColor(route.method)}`}
+                                    style={{ boxShadow: `0 0 0 1px ${colors.border}` }}
+                                >
+                                    {route.method.charAt(0)}
+                                </span>
+                                <span
+                                    className="absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full border"
+                                    style={{
+                                        backgroundColor: getStatusColor(route.status),
+                                        borderColor: colors.secondary,
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3">
+                                <span
+                                    className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                        getMethodColor(route.method)
+                                    }`}
+                                >
+                                    {route.method}
+                                </span>
+                                <span
+                                    className="flex-1 text-left text-sm font-mono truncate"
+                                    style={{ color: colors.textPrimary }}
+                                >
+                                    {route.path}
+                                </span>
+                                <span
+                                    className="w-2 h-2 rounded-full shrink-0"
+                                    style={{
+                                        backgroundColor: getStatusColor(route.status),
+                                    }}
+                                />
+                            </div>
                         )}
-                        <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{
-                                backgroundColor: getStatusColor(route.status),
-                            }}
-                        />
                     </button>
                 ))}
             </nav>
