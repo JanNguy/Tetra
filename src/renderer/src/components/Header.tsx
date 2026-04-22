@@ -18,13 +18,23 @@ export default function Header({
 }: HeaderProps) {
     return (
         <header
-            className="h-14 flex items-center justify-between px-6 border-b"
+            className="h-16 flex items-center justify-between px-6 border-b"
             style={{ backgroundColor: colors.primary, borderColor: colors.border }}
         >
             <div className="flex items-center gap-6">
-                <h1 className="text-xl font-bold tracking-tight" style={{ color: colors.accent }}>
-                    Tetra
-                </h1>
+                <div className="flex items-center gap-3">
+                    <img
+                        src="./logo.png"
+                        alt="Tetra logo"
+                        className="w-12 h-12 object-contain"
+                    />
+                    <h1
+                        className="text-xl font-bold tracking-tight"
+                        style={{ color: colors.accent }}
+                    >
+                        Tetra
+                    </h1>
+                </div>
                 <div className="flex items-center gap-2">
                     <span className="text-sm" style={{ color: colors.textSecondary }}>
                         Project:

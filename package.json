@@ -42,6 +42,8 @@
     "productName": "Tetra",
     "mac": {
       "target": "dmg",
+      "icon": "build/icons/icon.icns",
+      "category": "public.app-category.developer-tools",
       "identity": null
     },
     "directories": {
@@ -51,6 +53,8 @@
       "main.js",
       "preload.js",
       "index.html",
+      "logo.png",
+      "src/main/**/*.js",
       "src/renderer/dist/**/*",
       "src/renderer/src/tailwind.generated.css"
     ]
