@@ -3,7 +3,7 @@ import { colors } from "../../constants/theme";
 
 interface SettingsTabProps {
     serverSettings: ServerSettings;
-    handleSettingChange: (key: keyof ServerSettings, value: string | number | boolean) => void;
+    handleSettingChange: (key: keyof ServerSettings, value: ServerSettings[keyof ServerSettings]) => void;
     isPortAvailable: boolean | null;
     serverStatus: "stopped" | "running";
 }
@@ -74,6 +74,23 @@ export default function SettingsTab({
                                     Port is available
                                 </p>
                             )}
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Runtime</label>
+                            <select
+                                value={serverSettings.runtime}
+                                disabled={serverStatus === "running"}
+                                onChange={(e) => handleSettingChange("runtime", e.target.value as ServerSettings["runtime"])}
+                                className={`w-full px-4 py-3 rounded-lg border focus:outline-none transition-colors ${serverStatus === "running" ? "opacity-50 cursor-not-allowed" : "focus:border-blue-500"}`}
+                                style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                            >
+                                <option value="local">Local Node.js</option>
+                                <option value="podman">Podman Container</option>
+                            </select>
+                            <p className="text-xs mt-1" style={{ color: colors.textMuted }}>
+                                Podman isolates the mock server in a container.
+                            </p>
                         </div>
 
                         <div>

@@ -7,6 +7,7 @@ interface HeaderProps {
     onStartServer: () => void;
     onStopServer: () => void;
     isPortAvailable?: boolean | null;
+    serverTransition: "idle" | "starting" | "stopping" | "restarting";
 }
 
 export default function Header({
@@ -15,7 +16,19 @@ export default function Header({
     onStartServer,
     onStopServer,
     isPortAvailable,
+    serverTransition,
 }: HeaderProps) {
+    const isTransitioning = serverTransition !== "idle";
+
+    const transitionLabel =
+        serverTransition === "starting"
+            ? "Starting..."
+            : serverTransition === "stopping"
+              ? "Stopping..."
+              : serverTransition === "restarting"
+                ? "Restarting..."
+                : null;
+
     return (
         <header
             className="h-16 flex items-center justify-between px-6 border-b"
@@ -56,28 +69,29 @@ export default function Header({
                         }`}
                     />
                     <span className="text-sm" style={{ color: colors.textSecondary }}>
-                        {serverStatus === 'running'
+                        {transitionLabel || (serverStatus === 'running'
                             ? `${serverSettings.name} :${serverSettings.port}`
-                            : 'Stopped'}
+                            : 'Stopped')}
                     </span>
                 </div>
 
                 {serverStatus === 'running' ? (
                     <button
                         onClick={onStopServer}
-                        className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
+                        disabled={isTransitioning}
+                        className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ backgroundColor: colors.error, color: 'white' }}
                     >
-                        Stop
+                        {transitionLabel || 'Stop'}
                     </button>
                 ) : (
                     <button
                         onClick={onStartServer}
-                        disabled={isPortAvailable === false}
+                        disabled={isPortAvailable === false || isTransitioning}
                         className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ backgroundColor: colors.success, color: 'white' }}
                     >
-                        Start
+                        {transitionLabel || 'Start'}
                     </button>
                 )}
             </div>

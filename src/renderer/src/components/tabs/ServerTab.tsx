@@ -8,6 +8,7 @@ interface ServerTabProps {
     onStartServer: () => void;
     onStopServer: () => void;
     isPortAvailable?: boolean | null;
+    serverTransition: "idle" | "starting" | "stopping" | "restarting";
 }
 
 export default function ServerTab({
@@ -17,7 +18,19 @@ export default function ServerTab({
     onStartServer,
     onStopServer,
     isPortAvailable,
+    serverTransition,
 }: ServerTabProps) {
+    const isTransitioning = serverTransition !== "idle";
+
+    const transitionLabel =
+        serverTransition === "starting"
+            ? "Starting..."
+            : serverTransition === "stopping"
+              ? "Stopping..."
+              : serverTransition === "restarting"
+                ? "Restarting..."
+                : null;
+
     return (
         <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-2xl mx-auto space-y-8">
@@ -45,11 +58,19 @@ export default function ServerTab({
                                     ? `Running on port ${serverSettings.port}`
                                     : 'Not running'}
                             </p>
+                            <p
+                                className="text-xs mt-1 uppercase tracking-wide"
+                                style={{ color: colors.textMuted }}
+                            >
+                                Runtime: {serverSettings.runtime === 'podman' ? 'Podman' : 'Local'}
+                            </p>
                         </div>
                         <div className="flex items-center gap-2">
                             <span
                                 className={`w-3 h-3 rounded-full ${
-                                    serverStatus === 'running'
+                                    isTransitioning
+                                        ? 'bg-yellow-500 animate-pulse'
+                                        : serverStatus === 'running'
                                         ? 'bg-green-500'
                                         : 'bg-gray-500'
                                 }`}
@@ -58,7 +79,7 @@ export default function ServerTab({
                                 className="text-sm capitalize"
                                 style={{ color: colors.textSecondary }}
                             >
-                                {serverStatus}
+                                {transitionLabel || serverStatus}
                             </span>
                         </div>
                     </div>
@@ -70,6 +91,7 @@ export default function ServerTab({
                                 : onStartServer
                         }
                         disabled={
+                            isTransitioning ||
                             !serverSettings.name ||
                             !serverSettings.port ||
                             (serverStatus === 'stopped' &&
@@ -84,9 +106,9 @@ export default function ServerTab({
                             color: 'white',
                         }}
                     >
-                        {serverStatus === 'running'
+                        {transitionLabel || (serverStatus === 'running'
                             ? 'Stop Server'
-                            : 'Start Server'}
+                            : 'Start Server')}
                     </button>
                 </div>
 

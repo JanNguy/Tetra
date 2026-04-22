@@ -20,9 +20,12 @@ export interface LogEntry {
 
 export type Tab = "routes" | "server" | "settings";
 
+export type ServerRuntime = "local" | "podman";
+
 export interface ServerSettings {
     name: string;
     port: string;
+    runtime: ServerRuntime;
     corsEnabled: boolean;
     corsOrigin: string;
     delay: number;

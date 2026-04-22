@@ -21,6 +21,7 @@ export default function App() {
     const [serverStatus, setServerStatus] = useState<"stopped" | "running">("stopped");
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [methodFilter, setMethodFilter] = useState<string | null>(null);
+    const [serverTransition, setServerTransition] = useState<"idle" | "starting" | "stopping" | "restarting">("idle");
 
     const [routes, setRoutes] = useState<Route[]>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -56,16 +57,19 @@ export default function App() {
         }
     }, []);
 
-    const [serverSettings, setServerSettings] = useState<ServerSettings>({
+    const defaultServerSettings: ServerSettings = {
         name: 'My API Server',
         port: '3000',
+        runtime: 'local',
         corsEnabled: true,
         corsOrigin: '*',
         delay: 0,
         logRequests: true,
         logResponses: true,
         autoStart: false,
-    });
+    };
+
+    const [serverSettings, setServerSettings] = useState<ServerSettings>(defaultServerSettings);
 
     useEffect(() => {
         const initData = async () => {
@@ -76,7 +80,11 @@ export default function App() {
                         setRoutes(data.routes);
                     }
                     if (data.serverSettings) {
-                        setServerSettings(data.serverSettings);
+                        setServerSettings({
+                            ...defaultServerSettings,
+                            ...data.serverSettings,
+                            runtime: data.serverSettings.runtime === 'podman' ? 'podman' : 'local',
+                        });
                     }
                 }
             }
@@ -121,26 +129,40 @@ export default function App() {
     }, [serverSettings.port, serverStatus]);
 
     const handleRunServer = async () => {
+        if (serverTransition !== "idle") {
+            return;
+        }
+
         if (serverSettings.name && serverSettings.port) {
             try {
+                setServerTransition("starting");
                 if (window.electronAPI) {
                     await window.electronAPI.startServer(serverSettings, routes);
                 }
                 setServerStatus("running");
             } catch (err) {
                 console.error("Failed to start server:", err);
+            } finally {
+                setServerTransition("idle");
             }
         }
     };
 
     const handleStopServer = async () => {
+        if (serverTransition !== "idle") {
+            return;
+        }
+
         try {
+            setServerTransition("stopping");
             if (window.electronAPI) {
                 await window.electronAPI.stopServer();
             }
             setServerStatus("stopped");
         } catch (err) {
             console.error("Failed to stop server:", err);
+        } finally {
+            setServerTransition("idle");
         }
     };
 
@@ -164,9 +186,12 @@ export default function App() {
 
         if (serverStatus === 'running' && window.electronAPI) {
             try {
+                setServerTransition("restarting");
                 await window.electronAPI.restartServer(serverSettings, updatedRoutes);
             } catch (err) {
                 console.error('Failed to restart server:', err);
+            } finally {
+                setServerTransition("idle");
             }
         }
     };
@@ -177,9 +202,12 @@ export default function App() {
         if (serverStatus === 'running' && window.electronAPI) {
             const updatedRoutes = routes.map(r => (r.id === id ? { ...r, [field]: value } : r));
             try {
+                setServerTransition("restarting");
                 await window.electronAPI.restartServer(serverSettings, updatedRoutes);
             } catch (err) {
                 console.error('Failed to restart server:', err);
+            } finally {
+                setServerTransition("idle");
             }
         }
     };
@@ -193,14 +221,17 @@ export default function App() {
 
         if (serverStatus === 'running' && window.electronAPI) {
             try {
+                setServerTransition("restarting");
                 await window.electronAPI.restartServer(serverSettings, filteredRoutes);
             } catch (err) {
                 console.error('Failed to restart server:', err);
+            } finally {
+                setServerTransition("idle");
             }
         }
     };
 
-    const handleSettingChange = (key: keyof ServerSettings, value: string | number | boolean) => {
+    const handleSettingChange = (key: keyof ServerSettings, value: ServerSettings[keyof ServerSettings]) => {
         setServerSettings(prev => ({ ...prev, [key]: value }));
     };
 
@@ -232,6 +263,7 @@ export default function App() {
                 onStartServer={handleRunServer}
                 onStopServer={handleStopServer}
                 isPortAvailable={isPortAvailable}
+                serverTransition={serverTransition}
             />
 
             <div className="flex-1 flex overflow-hidden">
@@ -264,6 +296,7 @@ export default function App() {
                             onStartServer={handleRunServer}
                             onStopServer={handleStopServer}
                             isPortAvailable={isPortAvailable}
+                            serverTransition={serverTransition}
                         />
                     )}
 
