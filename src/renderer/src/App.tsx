@@ -10,9 +10,9 @@ import ServerTab from "./components/tabs/ServerTab";
 import SettingsTab from "./components/tabs/SettingsTab";
 
 declare global {
-  interface Window {
-    electronAPI?: any;
-  }
+    interface Window {
+        electronAPI?: any;
+    }
 }
 
 export default function App() {
@@ -34,7 +34,7 @@ export default function App() {
                     id: Date.now().toString() + Math.random().toString(),
                     timestamp: new Date().toLocaleTimeString(),
                     type: log.type,
-                    message: log.message
+                    message: log.message,
                 };
                 setLogs(prev => [newLog, ...prev]);
             });
@@ -44,7 +44,7 @@ export default function App() {
                     id: Date.now().toString() + Math.random().toString(),
                     timestamp: new Date().toLocaleTimeString(),
                     type: log.type,
-                    message: log.message
+                    message: log.message,
                 };
                 setLogs(prev => [newLog, ...prev]);
                 setServerStatus("stopped");
@@ -57,10 +57,10 @@ export default function App() {
     }, []);
 
     const [serverSettings, setServerSettings] = useState<ServerSettings>({
-        name: "My API Server",
-        port: "3000",
+        name: 'My API Server',
+        port: '3000',
         corsEnabled: true,
-        corsOrigin: "*",
+        corsOrigin: '*',
         delay: 0,
         logRequests: true,
         logResponses: true,
@@ -72,8 +72,12 @@ export default function App() {
             if (window.electronAPI) {
                 const data = await window.electronAPI.loadData();
                 if (data) {
-                    if (data.routes) setRoutes(data.routes);
-                    if (data.serverSettings) setServerSettings(data.serverSettings);
+                    if (data.routes) {
+                        setRoutes(data.routes);
+                    }
+                    if (data.serverSettings) {
+                        setServerSettings(data.serverSettings);
+                    }
                 }
             }
             setIsDataLoaded(true);
@@ -94,7 +98,7 @@ export default function App() {
                     setIsPortAvailable(true);
                     return;
                 }
-                
+
                 const portNum = parseInt(serverSettings.port);
                 if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
                     setIsPortAvailable(false);
@@ -143,39 +147,39 @@ export default function App() {
     const handleAddRoute = async () => {
         const newRoute: Route = {
             id: Date.now().toString(),
-            path: "/api/new-endpoint",
-            method: "GET",
-            status: "active",
-            description: "New Route",
-            responseTime: "-",
+            path: '/api/new-endpoint',
+            method: 'GET',
+            status: 'active',
+            description: 'New Route',
+            responseTime: '-',
             statusCode: 200,
-            headers: { "Content-Type": "application/json" },
-            body: "{\n  \"message\": \"Hello World\"\n}",
-            delay: 0
+            headers: { 'Content-Type': 'application/json' },
+            body: '{\n  "message": "Hello World"\n}',
+            delay: 0,
         };
         const updatedRoutes = [...routes, newRoute];
         setRoutes(updatedRoutes);
         setSelectedRouteId(newRoute.id);
-        setActiveTab("routes");
-        
-        if (serverStatus === "running" && window.electronAPI) {
+        setActiveTab('routes');
+
+        if (serverStatus === 'running' && window.electronAPI) {
             try {
                 await window.electronAPI.restartServer(serverSettings, updatedRoutes);
             } catch (err) {
-                console.error("Failed to restart server:", err);
+                console.error('Failed to restart server:', err);
             }
         }
     };
 
     const updateRoute = async (id: string, field: keyof Route, value: any) => {
-        setRoutes(routes.map(r => r.id === id ? { ...r, [field]: value } : r));
-        
-        if (serverStatus === "running" && window.electronAPI) {
-            const updatedRoutes = routes.map(r => r.id === id ? { ...r, [field]: value } : r);
+        setRoutes(routes.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+
+        if (serverStatus === 'running' && window.electronAPI) {
+            const updatedRoutes = routes.map(r => (r.id === id ? { ...r, [field]: value } : r));
             try {
                 await window.electronAPI.restartServer(serverSettings, updatedRoutes);
             } catch (err) {
-                console.error("Failed to restart server:", err);
+                console.error('Failed to restart server:', err);
             }
         }
     };
@@ -183,13 +187,15 @@ export default function App() {
     const deleteRoute = async (id: string) => {
         const filteredRoutes = routes.filter(r => r.id !== id);
         setRoutes(filteredRoutes);
-        if (selectedRouteId === id) setSelectedRouteId(null);
-        
-        if (serverStatus === "running" && window.electronAPI) {
+        if (selectedRouteId === id) {
+            setSelectedRouteId(null);
+        }
+
+        if (serverStatus === 'running' && window.electronAPI) {
             try {
                 await window.electronAPI.restartServer(serverSettings, filteredRoutes);
             } catch (err) {
-                console.error("Failed to restart server:", err);
+                console.error('Failed to restart server:', err);
             }
         }
     };
@@ -201,21 +207,35 @@ export default function App() {
     const selectedRoute = routes.find(r => r.id === selectedRouteId);
 
     if (!isDataLoaded) {
-        return <div className="h-screen flex items-center justify-center text-white" style={{ backgroundColor: colors.background }}>Loading...</div>;
+        return (
+            <div
+                className="h-screen flex items-center justify-center text-white"
+                style={{ backgroundColor: colors.background }}
+            >
+                Loading...
+            </div>
+        );
     }
 
     return (
-        <div className="h-screen flex flex-col" style={{ backgroundColor: colors.background, color: colors.textPrimary, fontFamily: "Inter, system-ui, sans-serif" }}>
-            <Header 
-                serverStatus={serverStatus} 
-                serverSettings={serverSettings} 
-                onStartServer={handleRunServer} 
-                onStopServer={handleStopServer} 
+        <div
+            className="h-screen flex flex-col"
+            style={{
+                backgroundColor: colors.background,
+                color: colors.textPrimary,
+                fontFamily: 'Inter, system-ui, sans-serif',
+            }}
+        >
+            <Header
+                serverStatus={serverStatus}
+                serverSettings={serverSettings}
+                onStartServer={handleRunServer}
+                onStopServer={handleStopServer}
                 isPortAvailable={isPortAvailable}
             />
 
             <div className="flex-1 flex overflow-hidden">
-                <Sidebar 
+                <Sidebar
                     sidebarCollapsed={sidebarCollapsed}
                     setSidebarCollapsed={setSidebarCollapsed}
                     activeTab={activeTab}
@@ -228,29 +248,29 @@ export default function App() {
                 />
 
                 <main className="flex-1 flex flex-col overflow-hidden">
-                    {activeTab === "routes" && (
-                        <RoutesTab 
-                            selectedRoute={selectedRoute} 
-                            updateRoute={updateRoute} 
-                            deleteRoute={deleteRoute} 
+                    {activeTab === 'routes' && (
+                        <RoutesTab
+                            selectedRoute={selectedRoute}
+                            updateRoute={updateRoute}
+                            deleteRoute={deleteRoute}
                         />
                     )}
 
-                    {activeTab === "server" && (
-                        <ServerTab 
-                            serverStatus={serverStatus} 
-                            serverSettings={serverSettings} 
-                            routes={routes} 
-                            onStartServer={handleRunServer} 
-                            onStopServer={handleStopServer} 
+                    {activeTab === 'server' && (
+                        <ServerTab
+                            serverStatus={serverStatus}
+                            serverSettings={serverSettings}
+                            routes={routes}
+                            onStartServer={handleRunServer}
+                            onStopServer={handleStopServer}
                             isPortAvailable={isPortAvailable}
                         />
                     )}
 
-                    {activeTab === "settings" && (
-                        <SettingsTab 
-                            serverSettings={serverSettings} 
-                            handleSettingChange={handleSettingChange} 
+                    {activeTab === 'settings' && (
+                        <SettingsTab
+                            serverSettings={serverSettings}
+                            handleSettingChange={handleSettingChange}
                             isPortAvailable={isPortAvailable}
                             serverStatus={serverStatus}
                         />

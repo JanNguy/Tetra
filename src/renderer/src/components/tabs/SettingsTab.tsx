@@ -8,13 +8,20 @@ interface SettingsTabProps {
     serverStatus: "stopped" | "running";
 }
 
-export default function SettingsTab({ serverSettings, handleSettingChange, isPortAvailable, serverStatus }: SettingsTabProps) {
+export default function SettingsTab({
+    serverSettings,
+    handleSettingChange,
+    isPortAvailable,
+    serverStatus,
+}: SettingsTabProps) {
     return (
         <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-2xl mx-auto space-y-8">
                 <div>
                     <h2 className="text-2xl font-bold mb-2">Settings</h2>
-                    <p className="text-sm" style={{ color: colors.textSecondary }}>Configure your server and application preferences</p>
+                    <p className="text-sm" style={{ color: colors.textSecondary }}>
+                        Configure your server and application preferences
+                    </p>
                 </div>
 
                 {/* Server Settings */}
