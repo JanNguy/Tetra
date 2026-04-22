@@ -1,39 +1,41 @@
-# Tetra 🐟
+# 🐟 Tetra
 
-A lightweight desktop app to create and run a local mock API.
+A lightweight desktop application to create and run local mock APIs for development and testing.
 
 ---
 
 ## Features
 
-* Create mock API routes (GET, POST, PUT, DELETE, PATCH)
-* Customize status codes, headers and responses
-* Add global or per-route delay
-* Enable/disable CORS
-* View request & response logs
-* Start/stop the server from the UI
-* Local config persistence
-* Podman runtime
+* Define mock API routes (**GET, POST, PUT, DELETE, PATCH**)
+* Configure **status codes, headers, and response bodies**
+* Add **global or per-route latency**
+* Enable or disable **CORS**
+* Inspect **request and response logs**
+* Control server lifecycle from the UI
+* Persist configuration locally
+* Support for multiple runtimes (**Node.js** and **Podman**)
+* Ability to run **multiple runtimes simultaneously**
+* Containerized execution via Podman (recommended)
 
 ---
 
 ## Requirements
 
 * Node.js
-* pnpm → https://pnpm.io/fr/installation
-* Podman → https://podman.io/docs/installation
+* pnpm
+* Podman (optional)
 
 ---
 
-## Getting started
-
-Install dependencies:
+## Installation
 
 ```bash
 pnpm install
 ```
 
-Run the app:
+---
+
+## Running the application
 
 ```bash
 pnpm start
@@ -43,72 +45,87 @@ pnpm start
 
 ## Usage
 
-1. Open the app
-2. Configure your server (port, CORS, etc.)
-3. Add a route using the **+** button
-4. Click **Start** to launch the server
+1. Launch the application
+2. Configure server settings (port, CORS, etc.)
+3. Select one or more runtimes
+4. Create routes via the UI
+5. Start the server
 
-Example:
-
-* `GET /api/health`
-* Response:
-
-```json
-{
-    "status": "ok"
-}
-```
-
-Test it:
-
-```bash
-curl http://localhost:3000/api/health
-```
+Multiple runtimes can be executed in parallel, provided they are configured to use different ports.
 
 ---
 
-## Tutorial: Podman runtime
+## Runtime Modes
 
-### 1) Install and start Podman
+Tetra provides two execution environments that can be used independently or concurrently.
 
-Check installation:
+### Node.js Runtime
+
+Intended for fast local development without containerization.
+
+Steps:
+
+1. Open runtime settings
+2. Select **Node.js runtime**
+3. Start the server
+
+---
+
+### Podman Runtime (recommended)
+
+Provides isolated and reproducible environments using containers.
+
+#### Setup
+
+Verify installation:
 
 ```bash
 podman --version
 ```
 
-On macOS, initialize and start the Podman machine (first time only):
+On macOS (first-time setup):
 
 ```bash
 podman machine init
 podman machine start
 ```
 
-### 2) Verify Podman is ready
+Check environment status:
 
 ```bash
 podman info
 ```
 
-If this command works, Tetra can use Podman runtime.
+#### Usage
 
-### 3) Enable Podman runtime in Tetra
+1. Open runtime settings
+2. Select **Podman runtime**
+3. Start the server
 
-1. Open **Tetra**
-2. Go to runtime/server settings
-3. Select **Podman runtime**
-4. Start the server
+---
 
-### 4) Validate with a route
+## Runtime Management
 
-Create:
+Runtimes can be started, stopped, or switched at any time.
+
+When running multiple runtimes:
+
+* Ensure each instance uses a distinct port
+* Stop a runtime before reconfiguring it
+
+---
+
+## Example
+
+Define a route:
 
 * `GET /api/health`
-* Response:
+
+Response:
 
 ```json
 {
-    "status": "ok"
+  "status": "ok"
 }
 ```
 
@@ -118,46 +135,51 @@ Test:
 curl http://localhost:3000/api/health
 ```
 
-### 5) Troubleshooting
+---
 
-If runtime fails:
+## Troubleshooting
+
+### Podman issues
 
 ```bash
 podman machine stop
 podman machine start
 ```
 
-Then restart Tetra and try again.
+Restart the application afterward.
+
+### Port conflicts
+
+Update the port in server settings and restart the runtime.
 
 ---
 
-## 📦 Build (macOS)
+## Build (macOS)
 
 ```bash
 pnpm dist
 ```
 
-Then:
+Steps:
 
 1. Open the generated `.dmg`
-2. Drag **Tetra** to Applications
-3. Launch the app
+2. Move the application to `/Applications`
+3. Launch Tetra
 
 ---
 
-## 🛠 Scripts
+## Scripts
 
 ```bash
-pnpm start   # run app
-pnpm dist    # build dmg
+pnpm start   # run application
+pnpm dist    # build macOS package
 ```
 
 ---
 
-## Stack
+## Technology Stack
 
 * Electron
 * React
 * Express
-* Tailwind
-
+* Tailwind CSS
