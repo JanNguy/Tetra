@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Route, LogEntry, Tab, ServerSettings } from "./types";
+import { Route, LogEntry, Tab, ServerSettings, RouteDefaults } from "./types";
 import { colors } from "./constants/theme";
 
 import Header from "./components/Header";
@@ -31,6 +31,79 @@ interface PendingRestart {
     settings: ServerSettings;
 }
 
+const ROUTE_FIELDS_REQUIRING_RESTART: Array<keyof Route> = [
+    "path",
+    "method",
+    "status",
+    "statusCode",
+    "headers",
+    "body",
+    "delay",
+    "request",
+    "errorOnMissingVariables",
+];
+
+const createDefaultRouteRequest = () => ({
+    query: "",
+    headers: "",
+    body: "",
+});
+
+const normalizeImportedJsonField = (
+    value: unknown,
+    fallback: string
+): string => {
+    if (typeof value === "string") {
+        return value;
+    }
+
+    if (value && typeof value === "object") {
+        return JSON.stringify(value, null, 2);
+    }
+
+    return fallback;
+};
+
+const createDefaultRouteDefaults = (): RouteDefaults => ({
+    method: "GET",
+    path: "/api/new-endpoint",
+    description: "New Route",
+    statusCode: 200,
+    headers: '{\n  "Content-Type": "application/json"\n}',
+    body: '{\n  "message": "Hello World"\n}',
+    delay: 0,
+    request: createDefaultRouteRequest(),
+    errorOnMissingVariables: false,
+});
+
+const normalizeRouteDefaults = (value: any): RouteDefaults => ({
+    ...createDefaultRouteDefaults(),
+    ...(value || {}),
+    method: ["GET", "POST", "PUT", "DELETE", "PATCH"].includes(value?.method)
+        ? value.method
+        : "GET",
+    path: typeof value?.path === "string" && value.path
+        ? value.path
+        : "/api/new-endpoint",
+    description: typeof value?.description === "string"
+        ? value.description
+        : "New Route",
+    statusCode: typeof value?.statusCode === "number" ? value.statusCode : 200,
+    headers: normalizeImportedJsonField(
+        value?.headers,
+        '{\n  "Content-Type": "application/json"\n}'
+    ),
+    body: normalizeImportedJsonField(
+        value?.body,
+        '{\n  "message": "Hello World"\n}'
+    ),
+    request: {
+        ...createDefaultRouteRequest(),
+        ...(value && typeof value.request === "object" ? value.request : {}),
+    },
+    errorOnMissingVariables: Boolean(value?.errorOnMissingVariables),
+});
+
 const createDefaultServerSettings = (name = "My API Server"): ServerSettings => ({
     name,
     port: "3000",
@@ -41,6 +114,7 @@ const createDefaultServerSettings = (name = "My API Server"): ServerSettings => 
     logRequests: true,
     logResponses: true,
     autoStart: false,
+    routeDefaults: createDefaultRouteDefaults(),
 });
 
 const createProject = (id: string, name: string): ProjectState => ({
@@ -56,12 +130,7 @@ const normalizeServerSettings = (value: any, fallbackName: string): ServerSettin
     ...createDefaultServerSettings(fallbackName),
     ...(value || {}),
     runtime: value && value.runtime === "podman" ? "podman" : "local",
-});
-
-const createDefaultRouteRequest = () => ({
-    query: "",
-    headers: "",
-    body: "",
+    routeDefaults: normalizeRouteDefaults(value?.routeDefaults),
 });
 
 const normalizeRoute = (route: any): Route => ({
@@ -77,9 +146,222 @@ const normalizeRoute = (route: any): Route => ({
     errorOnMissingVariables: Boolean(route?.errorOnMissingVariables),
 });
 
+
+const insertMissingJsonCommas = (rawValue: string): string => {
+    let result = "";
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < rawValue.length; index += 1) {
+        const currentChar = rawValue[index];
+
+        if (escaped) {
+            result += currentChar;
+            escaped = false;
+            continue;
+        }
+
+        if (currentChar === "\\") {
+            result += currentChar;
+            if (inString) {
+                escaped = true;
+            }
+            continue;
+        }
+
+        if (currentChar === "\"") {
+            inString = !inString;
+            result += currentChar;
+            continue;
+        }
+
+        if (!inString && (currentChar === "{" || currentChar === "[")) {
+            let previousIndex = result.length - 1;
+            while (previousIndex >= 0 && /\s/.test(result[previousIndex])) {
+                previousIndex -= 1;
+            }
+
+            const previousChar = previousIndex >= 0 ? result[previousIndex] : "";
+            if (previousChar === "}" || previousChar === "]" || previousChar === "\"") {
+                result += ",";
+            }
+        }
+
+        result += currentChar;
+    }
+
+    return result;
+};
+
+const convertSingleQuotedStrings = (rawValue: string): string => {
+    let result = "";
+    let inDoubleString = false;
+    let inSingleString = false;
+    let escaped = false;
+
+    for (let index = 0; index < rawValue.length; index += 1) {
+        const currentChar = rawValue[index];
+
+        if (escaped) {
+            result += currentChar;
+            escaped = false;
+            continue;
+        }
+
+        if (currentChar === "\\") {
+            result += currentChar;
+            escaped = true;
+            continue;
+        }
+
+        if (currentChar === "\"" && !inSingleString) {
+            inDoubleString = !inDoubleString;
+            result += currentChar;
+            continue;
+        }
+
+        if (currentChar === "'" && !inDoubleString) {
+            inSingleString = !inSingleString;
+            result += "\"";
+            continue;
+        }
+
+        result += currentChar;
+    }
+
+    return result;
+};
+
+const quoteUnquotedKeys = (rawValue: string): string => {
+    return rawValue.replace(/([{,]\s*)([A-Za-z_$][A-Za-z0-9_$-]*)(\s*:)/g, '$1"$2"$3');
+};
+
+const removeTrailingJsonCommas = (rawValue: string): string => {
+    return rawValue.replace(/,\s*([}\]])/g, '$1');
+};
+
+const normalizeRelaxedJson = (rawValue: string): string => {
+    return removeTrailingJsonCommas(
+        quoteUnquotedKeys(
+            convertSingleQuotedStrings(
+                insertMissingJsonCommas(rawValue)
+            )
+        )
+    );
+};
+
+const parseJsonObjectString = (rawValue: string, fallback: Record<string, string>) => {
+    try {
+        const parsedValue = JSON.parse(rawValue);
+        if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
+            return parsedValue;
+        }
+    } catch (err) {
+        try {
+            const parsedValue = JSON.parse(normalizeRelaxedJson(rawValue));
+            if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
+                return parsedValue;
+            }
+        } catch (nestedErr) {
+            return fallback;
+        }
+    }
+
+    return fallback;
+};
+
+const validateImportedRoute = (route: any, index: number) => {
+    const missingFields: string[] = [];
+    const invalidFields: string[] = [];
+
+    if (!route || typeof route !== "object" || Array.isArray(route)) {
+        throw new Error(`Route ${index + 1} must be an object`);
+    }
+
+    if (typeof route.method !== "string" || !route.method.trim()) {
+        missingFields.push("method");
+    }
+
+    if (typeof route.path !== "string" || !route.path.trim()) {
+        missingFields.push("path");
+    }
+
+    if (typeof route.statusCode !== "number") {
+        missingFields.push("statusCode");
+    } else if (!Number.isFinite(route.statusCode)) {
+        invalidFields.push("statusCode");
+    }
+
+    if (typeof route.body === "undefined") {
+        missingFields.push("body");
+    } else if (route.body === null) {
+        invalidFields.push("body");
+    }
+
+    if (missingFields.length > 0) {
+        throw new Error(`Route ${index + 1} is missing required fields: ${missingFields.join(", ")}`);
+    }
+
+    if (invalidFields.length > 0) {
+        throw new Error(`Route ${index + 1} has invalid fields: ${invalidFields.join(", ")}`);
+    }
+};
+
+const normalizeRouteIdentity = (method: string, path: string) =>
+    `${String(method || "").trim().toUpperCase()} ${String(path || "").trim()}`;
+
+const hasRouteConflict = (routes: Route[], method: string, path: string, excludedRouteId?: string) => {
+    const candidateIdentity = normalizeRouteIdentity(method, path);
+    return routes.some((route) => (
+        route.id !== excludedRouteId &&
+        normalizeRouteIdentity(route.method, route.path) === candidateIdentity
+    ));
+};
+
+const createUniqueRoutePath = (routes: Route[], method: string, basePath: string) => {
+    const trimmedBasePath = basePath.trim() || "/api/new-endpoint";
+    if (!hasRouteConflict(routes, method, trimmedBasePath)) {
+        return trimmedBasePath;
+    }
+
+    let suffix = 2;
+    while (hasRouteConflict(routes, method, `${trimmedBasePath}-${suffix}`)) {
+        suffix += 1;
+    }
+
+    return `${trimmedBasePath}-${suffix}`;
+};
+
+const normalizeImportedRoute = (route: any, index: number): Route => ({
+    ...normalizeRoute(route),
+    id: route?.id || `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+    path: typeof route?.path === "string" && route.path ? route.path : `/api/imported-${index + 1}`,
+    method: ["GET", "POST", "PUT", "DELETE", "PATCH"].includes(route?.method)
+        ? route.method
+        : "GET",
+    status: ["active", "inactive", "error"].includes(route?.status)
+        ? route.status
+        : "active",
+    description: typeof route?.description === "string" ? route.description : "Imported Route",
+    responseTime: typeof route?.responseTime === "string" ? route.responseTime : "-",
+    statusCode: typeof route?.statusCode === "number" ? route.statusCode : 200,
+    headers: route?.headers && typeof route.headers === "object"
+        ? route.headers
+        : { "Content-Type": "application/json" },
+    body: normalizeImportedJsonField(route?.body, '{\n  "message": "Hello World"\n}'),
+    request: {
+        query: normalizeImportedJsonField(route?.request?.query, ""),
+        headers: normalizeImportedJsonField(route?.request?.headers, ""),
+        body: normalizeImportedJsonField(route?.request?.body, ""),
+    },
+    delay: typeof route?.delay === "number" ? route.delay : 0,
+});
+
 export default function App() {
     const [activeTab, setActiveTab] = useState<Tab>("routes");
     const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+    const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
+    const [isRouteSelectionMode, setIsRouteSelectionMode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [methodFilter, setMethodFilter] = useState<string | null>(null);
 
@@ -104,10 +386,51 @@ export default function App() {
         ? activeProject.serverTransition
         : "idle";
 
+    const pushUiLog = (type: LogEntry["type"], message: string) => {
+        const projectPrefix = activeProject?.id || activeProjectId || "default";
+        setLogs(prev => [{
+            id: Date.now().toString() + Math.random().toString(),
+            timestamp: new Date().toLocaleTimeString(),
+            type,
+            message: `[${projectPrefix}] ${message}`,
+        }, ...prev]);
+    };
+
     const updateProject = (projectId: string, updater: (project: ProjectState) => ProjectState) => {
         setProjects(prev => prev.map(project => (
             project.id === projectId ? updater(project) : project
         )));
+    };
+
+    const applyRoutesUpdate = (projectId: string, nextRoutes: Route[], restartDelayMs?: number) => {
+        updateProject(projectId, project => ({
+            ...project,
+            routes: nextRoutes,
+        }));
+
+        setSelectedRouteIds((prev) => prev.filter((routeId) => nextRoutes.some((route) => route.id === routeId)));
+
+        if (selectedRouteId && !nextRoutes.some((route) => route.id === selectedRouteId)) {
+            setSelectedRouteId(null);
+        }
+
+        if (
+            restartDelayMs !== undefined &&
+            activeProject &&
+            activeProject.id === projectId &&
+            activeServerStatus === "running" &&
+            window.electronAPI
+        ) {
+            scheduleProjectRestart(projectId, activeServerSettings, nextRoutes, restartDelayMs);
+        }
+    };
+
+    const toggleRouteSelection = (routeId: string) => {
+        setSelectedRouteIds((prev) => (
+            prev.includes(routeId)
+                ? prev.filter((id) => id !== routeId)
+                : [...prev, routeId]
+        ));
     };
 
     const scheduleProjectRestart = (
@@ -265,6 +588,8 @@ export default function App() {
             cancelProjectRestart(activeProjectId);
         }
         setSelectedRouteId(null);
+        setSelectedRouteIds([]);
+        setIsRouteSelectionMode(false);
     }, [activeProjectId]);
 
     useEffect(() => {
@@ -370,33 +695,43 @@ export default function App() {
             return;
         }
 
+        const routeDefaults = normalizeRouteDefaults(activeProject.serverSettings.routeDefaults);
+        const nextPath = createUniqueRoutePath(
+            activeProject.routes,
+            routeDefaults.method,
+            routeDefaults.path
+        );
         const newRoute: Route = {
             id: Date.now().toString(),
-            path: '/api/new-endpoint',
-            method: 'GET',
+            path: nextPath,
+            method: routeDefaults.method,
             status: 'active',
-            description: 'New Route',
+            description: routeDefaults.description,
             responseTime: '-',
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
-            body: '{\n  "message": "Hello World"\n}',
-            delay: 0,
-            request: createDefaultRouteRequest(),
-            errorOnMissingVariables: false,
+            statusCode: routeDefaults.statusCode,
+            headers: parseJsonObjectString(routeDefaults.headers, { 'Content-Type': 'application/json' }),
+            body: routeDefaults.body,
+            delay: routeDefaults.delay,
+            request: {
+                ...createDefaultRouteRequest(),
+                ...routeDefaults.request,
+            },
+            errorOnMissingVariables: routeDefaults.errorOnMissingVariables,
         };
 
-        const updatedRoutes = [...activeProject.routes, newRoute];
-        updateProject(activeProject.id, project => ({
-            ...project,
-            routes: updatedRoutes,
-        }));
-
-        setSelectedRouteId(newRoute.id);
-        setActiveTab('routes');
-
-        if (activeServerStatus === 'running' && window.electronAPI) {
-            scheduleProjectRestart(activeProject.id, activeServerSettings, updatedRoutes, 0);
+        if (nextPath !== routeDefaults.path.trim()) {
+            pushUiLog(
+                "info",
+                `Route ${routeDefaults.method} ${routeDefaults.path} already exists. New route created as ${routeDefaults.method} ${nextPath}.`
+            );
         }
+
+        const updatedRoutes = [...activeProject.routes, newRoute];
+        setSelectedRouteId(newRoute.id);
+        setSelectedRouteIds([]);
+        setIsRouteSelectionMode(false);
+        setActiveTab('routes');
+        applyRoutesUpdate(activeProject.id, updatedRoutes, 0);
     };
 
     const updateRoute = async (id: string, field: keyof Route, value: any) => {
@@ -404,33 +739,35 @@ export default function App() {
             return;
         }
 
+        const currentRoute = activeProject.routes.find(route => route.id === id);
+        if (!currentRoute) {
+            return;
+        }
+
+        const nextMethod = field === "method" ? value : currentRoute.method;
+        const nextPath = field === "path" ? value : currentRoute.path;
+
+        if (
+            (field === "method" || field === "path") &&
+            hasRouteConflict(activeProject.routes, nextMethod, nextPath, id)
+        ) {
+            pushUiLog("error", `Duplicate route blocked: ${String(nextMethod).toUpperCase()} ${String(nextPath).trim()}`);
+            return;
+        }
+
         const updatedRoutes = activeProject.routes.map(r => (
             r.id === id ? { ...r, [field]: value } : r
         ));
 
-        updateProject(activeProject.id, project => ({
-            ...project,
-            routes: updatedRoutes,
-        }));
-
-        const routeFieldsRequiringRestart: Array<keyof Route> = [
-            "path",
-            "method",
-            "status",
-            "statusCode",
-            "headers",
-            "body",
-            "delay",
-            "request",
-            "errorOnMissingVariables",
-        ];
-
         if (
             activeServerStatus === 'running' &&
-            routeFieldsRequiringRestart.includes(field)
+            ROUTE_FIELDS_REQUIRING_RESTART.includes(field)
         ) {
-            scheduleProjectRestart(activeProject.id, activeServerSettings, updatedRoutes);
+            applyRoutesUpdate(activeProject.id, updatedRoutes, 250);
+            return;
         }
+
+        applyRoutesUpdate(activeProject.id, updatedRoutes);
     };
 
     const deleteRoute = async (id: string) => {
@@ -439,18 +776,26 @@ export default function App() {
         }
 
         const filteredRoutes = activeProject.routes.filter(r => r.id !== id);
-        updateProject(activeProject.id, project => ({
-            ...project,
-            routes: filteredRoutes,
-        }));
+        applyRoutesUpdate(
+            activeProject.id,
+            filteredRoutes,
+            activeServerStatus === "running" ? 0 : undefined
+        );
+    };
 
-        if (selectedRouteId === id) {
-            setSelectedRouteId(null);
+    const deleteSelectedRoutes = async () => {
+        if (!activeProject || selectedRouteIds.length === 0) {
+            return;
         }
 
-        if (activeServerStatus === 'running' && window.electronAPI) {
-            scheduleProjectRestart(activeProject.id, activeServerSettings, filteredRoutes, 0);
-        }
+        const selectedIds = new Set(selectedRouteIds);
+        const filteredRoutes = activeProject.routes.filter((route) => !selectedIds.has(route.id));
+        applyRoutesUpdate(
+            activeProject.id,
+            filteredRoutes,
+            activeServerStatus === "running" ? 0 : undefined
+        );
+        setIsRouteSelectionMode(false);
     };
 
     const handleSettingChange = (key: keyof ServerSettings, value: ServerSettings[keyof ServerSettings]) => {
@@ -500,6 +845,64 @@ export default function App() {
         setProjects(prev => [...prev, nextProject]);
         setActiveProjectId(newId);
         setSelectedRouteId(null);
+        setSelectedRouteIds([]);
+        setIsRouteSelectionMode(false);
+    };
+
+    const handleImportRoutes = async (rawValue: string) => {
+        if (!activeProject) {
+            return;
+        }
+
+        let parsedValue: any;
+        try {
+            parsedValue = JSON.parse(rawValue);
+        } catch (err) {
+            try {
+                parsedValue = JSON.parse(normalizeRelaxedJson(rawValue));
+            } catch (nestedErr) {
+                throw new Error("Invalid JSON");
+            }
+        }
+
+        const incomingRoutes = Array.isArray(parsedValue)
+            ? parsedValue
+            : Array.isArray(parsedValue?.routes)
+                ? parsedValue.routes
+                : null;
+
+        if (!incomingRoutes || incomingRoutes.length === 0) {
+            throw new Error("JSON must be an array of routes or an object with a routes array");
+        }
+
+        incomingRoutes.forEach((route, index) => {
+            validateImportedRoute(route, index);
+        });
+
+        const importedIdentities = new Set<string>();
+        incomingRoutes.forEach((route, index) => {
+            const routeIdentity = normalizeRouteIdentity(route.method, route.path);
+            if (importedIdentities.has(routeIdentity)) {
+                throw new Error(`Imported routes contain a duplicate at route ${index + 1}: ${route.method} ${route.path}`);
+            }
+            importedIdentities.add(routeIdentity);
+
+            if (hasRouteConflict(activeProject.routes, route.method, route.path)) {
+                throw new Error(`Route already exists in this project: ${route.method} ${route.path}`);
+            }
+        });
+
+        const normalizedRoutes = incomingRoutes.map((route, index) =>
+            normalizeImportedRoute(route, index)
+        );
+        const updatedRoutes = [...activeProject.routes, ...normalizedRoutes];
+
+        if (!selectedRouteId && normalizedRoutes[0]) {
+            setSelectedRouteId(normalizedRoutes[0].id);
+        }
+        setSelectedRouteIds([]);
+        setIsRouteSelectionMode(false);
+        applyRoutesUpdate(activeProject.id, updatedRoutes, activeServerStatus === "running" ? 0 : undefined);
     };
 
     const selectedRoute = activeRoutes.find(r => r.id === selectedRouteId);
@@ -546,6 +949,11 @@ export default function App() {
                     routes={activeRoutes}
                     selectedRouteId={selectedRouteId}
                     setSelectedRouteId={setSelectedRouteId}
+                    selectedRouteIds={selectedRouteIds}
+                    isRouteSelectionMode={isRouteSelectionMode}
+                    setIsRouteSelectionMode={setIsRouteSelectionMode}
+                    onToggleRouteSelection={toggleRouteSelection}
+                    onDeleteSelectedRoutes={deleteSelectedRoutes}
                     onAddRoute={handleAddRoute}
                     methodFilter={methodFilter}
                 />
@@ -566,6 +974,7 @@ export default function App() {
                             routes={activeRoutes}
                             onStartServer={handleRunServer}
                             onStopServer={handleStopServer}
+                            onImportRoutes={handleImportRoutes}
                             isPortAvailable={isPortAvailable}
                             serverTransition={activeServerTransition}
                         />

@@ -17,6 +17,17 @@ if (!gotSingleInstanceLock) {
     app.quit();
 }
 
+function resolveIconPath() {
+    const candidates = [
+        path.join(process.resourcesPath || "", "icon.icns"),
+        path.join(app.getAppPath(), "build/icons/icon.icns"),
+        path.join(__dirname, "build/icons/icon.icns"),
+        path.join(process.cwd(), "build/icons/icon.icns"),
+    ].filter(Boolean);
+
+    return candidates.find(candidate => fs.existsSync(candidate));
+}
+
 function resolveLogoPath() {
     const candidates = [
         path.join(app.getAppPath(), 'logo.png'),
@@ -27,15 +38,23 @@ function resolveLogoPath() {
     return candidates.find(candidate => fs.existsSync(candidate));
 }
 
+const iconPath = resolveIconPath();
 const logoPath = resolveLogoPath();
 
 function getAppIcon() {
-    if (!logoPath) {
-        return undefined;
+    if (iconPath) {
+        const image = nativeImage.createFromPath(iconPath);
+        if (!image.isEmpty()) {
+            return image;
+        }
     }
 
-    const image = nativeImage.createFromPath(logoPath);
-    return image.isEmpty() ? undefined : image;
+    if (logoPath) {
+        const image = nativeImage.createFromPath(logoPath);
+        return image.isEmpty() ? undefined : image;
+    }
+
+    return undefined;
 }
 
 function getTrayIcon() {
@@ -60,8 +79,8 @@ function ensureDockIcon() {
         return;
     }
 
-    if (logoPath) {
-        const icon = nativeImage.createFromPath(logoPath);
+    if (iconPath || logoPath) {
+        const icon = nativeImage.createFromPath(iconPath || logoPath);
         if (!icon.isEmpty()) {
             const dockIcon = icon.resize({ width: 128, height: 128 });
             app.dock.setIcon(dockIcon);

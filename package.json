@@ -42,7 +42,7 @@
     "productName": "Tetra",
     "mac": {
       "target": "dmg",
-      "icon": "build/icons/icon.icns",
+      "icon": "build/app-icon.png",
       "category": "public.app-category.developer-tools",
       "identity": null
     },

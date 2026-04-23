@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import { ServerSettings } from "../../types";
 import { colors } from "../../constants/theme";
 
@@ -14,6 +15,76 @@ export default function SettingsTab({
     isPortAvailable,
     serverStatus,
 }: SettingsTabProps) {
+    const routeDefaults = serverSettings.routeDefaults;
+
+    const updateRouteDefaults = (
+        key: keyof ServerSettings["routeDefaults"],
+        value: ServerSettings["routeDefaults"][keyof ServerSettings["routeDefaults"]]
+    ) => {
+        handleSettingChange("routeDefaults", {
+            ...routeDefaults,
+            [key]: value,
+        });
+    };
+
+    const handleEditorKeyDown = (
+        event: KeyboardEvent<HTMLTextAreaElement>,
+        value: string,
+        onValueChange: (nextValue: string) => void
+    ) => {
+        const pairs: Record<string, string> = {
+            "{": "}",
+            "[": "]",
+            "(": ")",
+            "\"": "\"",
+            "'": "'",
+        };
+        const closingCharacters = new Set(Object.values(pairs));
+        const { key, currentTarget } = event;
+        const selectionStart = currentTarget.selectionStart;
+        const selectionEnd = currentTarget.selectionEnd;
+        const selectedText = value.slice(selectionStart, selectionEnd);
+        const nextCharacter = value[selectionStart];
+
+        if (key === "Tab") {
+            event.preventDefault();
+            const indentation = "    ";
+            const nextValue = `${value.slice(0, selectionStart)}${indentation}${value.slice(selectionEnd)}`;
+            onValueChange(nextValue);
+
+            requestAnimationFrame(() => {
+                currentTarget.selectionStart = selectionStart + indentation.length;
+                currentTarget.selectionEnd = selectionStart + indentation.length;
+            });
+            return;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(pairs, key)) {
+            event.preventDefault();
+            const closingChar = pairs[key];
+            const nextValue = `${value.slice(0, selectionStart)}${key}${selectedText}${closingChar}${value.slice(selectionEnd)}`;
+            onValueChange(nextValue);
+
+            requestAnimationFrame(() => {
+                currentTarget.selectionStart = selectionStart + 1;
+                currentTarget.selectionEnd = selectionStart + 1 + selectedText.length;
+            });
+            return;
+        }
+
+        if (
+            closingCharacters.has(key) &&
+            selectionStart === selectionEnd &&
+            nextCharacter === key
+        ) {
+            event.preventDefault();
+            requestAnimationFrame(() => {
+                currentTarget.selectionStart = selectionStart + 1;
+                currentTarget.selectionEnd = selectionStart + 1;
+            });
+        }
+    };
+
     return (
         <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-2xl mx-auto space-y-8">
@@ -219,6 +290,163 @@ export default function SettingsTab({
                             >
                                 <span
                                     className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${serverSettings.autoStart ? "translate-x-7" : "translate-x-0"}`}
+                                />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-xl border" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+                    <div className="px-6 py-4 border-b" style={{ borderColor: colors.border }}>
+                        <h3 className="font-medium flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke={colors.accent} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h10" />
+                            </svg>
+                            Default Route Template
+                        </h3>
+                        <p className="text-xs mt-1" style={{ color: colors.textMuted }}>
+                            These values are reused each time you create a new route.
+                        </p>
+                    </div>
+                    <div className="p-6 space-y-5">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Method</label>
+                                <select
+                                    value={routeDefaults.method}
+                                    onChange={(e) => updateRouteDefaults("method", e.target.value as ServerSettings["routeDefaults"]["method"])}
+                                    className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors"
+                                    style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                                >
+                                    <option value="GET">GET</option>
+                                    <option value="POST">POST</option>
+                                    <option value="PUT">PUT</option>
+                                    <option value="DELETE">DELETE</option>
+                                    <option value="PATCH">PATCH</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Status Code</label>
+                                <input
+                                    type="number"
+                                    min="100"
+                                    max="599"
+                                    value={routeDefaults.statusCode}
+                                    onChange={(e) => updateRouteDefaults("statusCode", parseInt(e.target.value, 10) || 200)}
+                                    className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono"
+                                    style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Path</label>
+                            <input
+                                type="text"
+                                value={routeDefaults.path}
+                                onChange={(e) => updateRouteDefaults("path", e.target.value)}
+                                className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono"
+                                style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Description</label>
+                            <input
+                                type="text"
+                                value={routeDefaults.description}
+                                onChange={(e) => updateRouteDefaults("description", e.target.value)}
+                                className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors"
+                                style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Route Delay (ms)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={routeDefaults.delay}
+                                onChange={(e) => updateRouteDefaults("delay", parseInt(e.target.value, 10) || 0)}
+                                className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono"
+                                style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Default Headers</label>
+                            <textarea
+                                value={routeDefaults.headers}
+                                onChange={(e) => updateRouteDefaults("headers", e.target.value)}
+                                onKeyDown={(e) => handleEditorKeyDown(e, routeDefaults.headers, (nextValue) => updateRouteDefaults("headers", nextValue))}
+                                rows={5}
+                                className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono resize-none"
+                                style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Default Response Body</label>
+                            <textarea
+                                value={routeDefaults.body}
+                                onChange={(e) => updateRouteDefaults("body", e.target.value)}
+                                onKeyDown={(e) => handleEditorKeyDown(e, routeDefaults.body, (nextValue) => updateRouteDefaults("body", nextValue))}
+                                rows={8}
+                                className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono resize-none"
+                                style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Default Request Query</label>
+                                <textarea
+                                    value={routeDefaults.request.query}
+                                    onChange={(e) => updateRouteDefaults("request", { ...routeDefaults.request, query: e.target.value })}
+                                    onKeyDown={(e) => handleEditorKeyDown(e, routeDefaults.request.query, (nextValue) => updateRouteDefaults("request", { ...routeDefaults.request, query: nextValue }))}
+                                    rows={4}
+                                    className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono resize-none"
+                                    style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Default Request Headers</label>
+                                <textarea
+                                    value={routeDefaults.request.headers}
+                                    onChange={(e) => updateRouteDefaults("request", { ...routeDefaults.request, headers: e.target.value })}
+                                    onKeyDown={(e) => handleEditorKeyDown(e, routeDefaults.request.headers, (nextValue) => updateRouteDefaults("request", { ...routeDefaults.request, headers: nextValue }))}
+                                    rows={4}
+                                    className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono resize-none"
+                                    style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Default Request Body</label>
+                                <textarea
+                                    value={routeDefaults.request.body}
+                                    onChange={(e) => updateRouteDefaults("request", { ...routeDefaults.request, body: e.target.value })}
+                                    onKeyDown={(e) => handleEditorKeyDown(e, routeDefaults.request.body, (nextValue) => updateRouteDefaults("request", { ...routeDefaults.request, body: nextValue }))}
+                                    rows={5}
+                                    className="w-full px-4 py-3 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors font-mono resize-none"
+                                    style={{ backgroundColor: colors.primary, borderColor: colors.border, color: colors.textPrimary }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="font-medium">Error If Missing Variable</p>
+                                <p className="text-xs" style={{ color: colors.textMuted }}>Enable this by default on new routes.</p>
+                            </div>
+                            <button
+                                onClick={() => updateRouteDefaults("errorOnMissingVariables", !routeDefaults.errorOnMissingVariables)}
+                                className="relative w-14 h-7 rounded-full transition-colors"
+                                style={{ backgroundColor: routeDefaults.errorOnMissingVariables ? colors.accent : colors.border }}
+                            >
+                                <span
+                                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${routeDefaults.errorOnMissingVariables ? "translate-x-7" : "translate-x-0"}`}
                                 />
                             </button>
                         </div>

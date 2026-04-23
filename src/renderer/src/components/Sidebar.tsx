@@ -8,7 +8,12 @@ interface SidebarProps {
     setActiveTab: (tab: Tab) => void;
     routes: Route[];
     selectedRouteId: string | null;
-    setSelectedRouteId: (id: string) => void;
+    setSelectedRouteId: (id: string | null) => void;
+    selectedRouteIds: string[];
+    isRouteSelectionMode: boolean;
+    setIsRouteSelectionMode: (enabled: boolean) => void;
+    onToggleRouteSelection: (id: string) => void;
+    onDeleteSelectedRoutes: () => void;
     onAddRoute: () => void;
     methodFilter: string | null;
 }
@@ -21,10 +26,16 @@ export default function Sidebar({
     routes,
     selectedRouteId,
     setSelectedRouteId,
+    selectedRouteIds,
+    isRouteSelectionMode,
+    setIsRouteSelectionMode,
+    onToggleRouteSelection,
+    onDeleteSelectedRoutes,
     onAddRoute,
     methodFilter,
 }: SidebarProps) {
     const filteredRoutes = methodFilter ? routes.filter(r => r.method === methodFilter) : routes;
+    const selectedCount = selectedRouteIds.length;
 
     return (
         <aside
@@ -183,24 +194,53 @@ export default function Sidebar({
                         >
                             Routes
                         </span>
-                        <button
-                            onClick={onAddRoute}
-                            className="hover:text-white transition-colors"
-                            title="Add Route"
-                        >
-                            <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setIsRouteSelectionMode(!isRouteSelectionMode)}
+                                className="hover:text-white transition-colors text-xs"
+                                style={{ color: isRouteSelectionMode ? colors.accent : colors.textMuted }}
+                                title="Toggle multi-select"
                             >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M12 4v16m8-8H4"
-                                />
-                            </svg>
+                                Select
+                            </button>
+                            <button
+                                onClick={onAddRoute}
+                                className="hover:text-white transition-colors"
+                                title="Add Route"
+                            >
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 4v16m8-8H4"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {!sidebarCollapsed && isRouteSelectionMode && (
+                    <div
+                        className="mx-2 mb-3 rounded-lg border px-3 py-2 flex items-center justify-between"
+                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    >
+                        <span className="text-xs" style={{ color: colors.textSecondary }}>
+                            {selectedCount} selected
+                        </span>
+                        <button
+                            onClick={onDeleteSelectedRoutes}
+                            disabled={selectedCount === 0}
+                            className="text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={{ color: colors.error }}
+                        >
+                            Delete
                         </button>
                     </div>
                 )}
@@ -209,6 +249,10 @@ export default function Sidebar({
                         key={route.id}
                         title={`${route.method} ${route.path}`}
                         onClick={() => {
+                            if (isRouteSelectionMode) {
+                                onToggleRouteSelection(route.id);
+                                return;
+                            }
                             setSelectedRouteId(route.id);
                             setActiveTab('routes');
                         }}
@@ -245,6 +289,15 @@ export default function Sidebar({
                             </div>
                         ) : (
                             <div className="flex items-center gap-3">
+                                {isRouteSelectionMode && (
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedRouteIds.includes(route.id)}
+                                        onChange={() => onToggleRouteSelection(route.id)}
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="rounded"
+                                    />
+                                )}
                                 <span
                                     className={`px-2 py-0.5 rounded text-xs font-bold ${
                                         getMethodColor(route.method)

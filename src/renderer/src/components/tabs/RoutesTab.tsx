@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import { Route } from "../../types";
 import { colors, getMethodColor, getStatusColor } from "../../constants/theme";
 
@@ -12,6 +13,64 @@ export default function RoutesTab({
     updateRoute,
     deleteRoute,
 }: RoutesTabProps) {
+    const handleEditorKeyDown = (
+        event: KeyboardEvent<HTMLTextAreaElement>,
+        value: string,
+        onValueChange: (nextValue: string) => void
+    ) => {
+        const pairs: Record<string, string> = {
+            "{": "}",
+            "[": "]",
+            "(": ")",
+            "\"": "\"",
+            "'": "'",
+        };
+        const closingCharacters = new Set(Object.values(pairs));
+        const { key, currentTarget } = event;
+        const selectionStart = currentTarget.selectionStart;
+        const selectionEnd = currentTarget.selectionEnd;
+        const selectedText = value.slice(selectionStart, selectionEnd);
+        const nextCharacter = value[selectionStart];
+
+        if (key === "Tab") {
+            event.preventDefault();
+            const indentation = "    ";
+            const nextValue = `${value.slice(0, selectionStart)}${indentation}${value.slice(selectionEnd)}`;
+            onValueChange(nextValue);
+
+            requestAnimationFrame(() => {
+                currentTarget.selectionStart = selectionStart + indentation.length;
+                currentTarget.selectionEnd = selectionStart + indentation.length;
+            });
+            return;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(pairs, key)) {
+            event.preventDefault();
+            const closingChar = pairs[key];
+            const nextValue = `${value.slice(0, selectionStart)}${key}${selectedText}${closingChar}${value.slice(selectionEnd)}`;
+            onValueChange(nextValue);
+
+            requestAnimationFrame(() => {
+                currentTarget.selectionStart = selectionStart + 1;
+                currentTarget.selectionEnd = selectionStart + 1 + selectedText.length;
+            });
+            return;
+        }
+
+        if (
+            closingCharacters.has(key) &&
+            selectionStart === selectionEnd &&
+            nextCharacter === key
+        ) {
+            event.preventDefault();
+            requestAnimationFrame(() => {
+                currentTarget.selectionStart = selectionStart + 1;
+                currentTarget.selectionEnd = selectionStart + 1;
+            });
+        }
+    };
+
     const requestConfig = selectedRoute?.request || {
         query: "",
         headers: "",
@@ -255,6 +314,11 @@ export default function RoutesTab({
                             onChange={(e) =>
                                 updateRoute(selectedRoute.id, 'body', e.target.value)
                             }
+                            onKeyDown={(e) =>
+                                handleEditorKeyDown(e, selectedRoute.body || "", (nextValue) =>
+                                    updateRoute(selectedRoute.id, "body", nextValue)
+                                )
+                            }
                             className="w-full flex-1 min-h-[150px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                             style={{
                                 backgroundColor: colors.background,
@@ -339,6 +403,14 @@ export default function RoutesTab({
                                             query: e.target.value,
                                         })
                                     }
+                                    onKeyDown={(e) =>
+                                        handleEditorKeyDown(e, requestConfig.query, (nextValue) =>
+                                            updateRoute(selectedRoute.id, "request", {
+                                                ...requestConfig,
+                                                query: nextValue,
+                                            })
+                                        )
+                                    }
                                     placeholder={'{\n  "search": "",\n  "page": ""\n}'}
                                     className="w-full min-h-[92px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     style={{
@@ -364,6 +436,14 @@ export default function RoutesTab({
                                             headers: e.target.value,
                                         })
                                     }
+                                    onKeyDown={(e) =>
+                                        handleEditorKeyDown(e, requestConfig.headers, (nextValue) =>
+                                            updateRoute(selectedRoute.id, "request", {
+                                                ...requestConfig,
+                                                headers: nextValue,
+                                            })
+                                        )
+                                    }
                                     placeholder={'{\n  "authorization": "",\n  "x-api-key": ""\n}'}
                                     className="w-full min-h-[92px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     style={{
@@ -388,6 +468,14 @@ export default function RoutesTab({
                                             ...requestConfig,
                                             body: e.target.value,
                                         })
+                                    }
+                                    onKeyDown={(e) =>
+                                        handleEditorKeyDown(e, requestConfig.body, (nextValue) =>
+                                            updateRoute(selectedRoute.id, "request", {
+                                                ...requestConfig,
+                                                body: nextValue,
+                                            })
+                                        )
                                     }
                                     placeholder={'{\n  "name": "",\n  "email": ""\n}'}
                                     className="w-full min-h-[92px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"

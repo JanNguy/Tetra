@@ -4,6 +4,18 @@ export interface RouteRequestConfig {
     body: string;
 }
 
+export interface RouteDefaults {
+    method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+    path: string;
+    description: string;
+    statusCode: number;
+    headers: string;
+    body: string;
+    delay: number;
+    request: RouteRequestConfig;
+    errorOnMissingVariables: boolean;
+}
+
 export interface Route {
     id: string;
     path: string;
@@ -40,4 +52,5 @@ export interface ServerSettings {
     logRequests: boolean;
     logResponses: boolean;
     autoStart: boolean;
+    routeDefaults: RouteDefaults;
 }
