@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const serverManager = require('./src/main/serverManager');
 
 const APP_NAME = 'Tetra';
 app.setName(APP_NAME);
@@ -9,6 +10,7 @@ process.title = APP_NAME;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let hasCleanedUpServers = false;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -105,7 +107,8 @@ mainWindow.on('show', () => {
     setupIpcHandlers(mainWindow);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+    await serverManager.cleanupManagedPodmanContainers();
     ensureDockIcon();
     createWindow();
 
@@ -184,6 +187,28 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
     isQuitting = true;
+});
+
+app.on('will-quit', async (event) => {
+    if (hasCleanedUpServers) {
+        return;
+    }
+
+    event.preventDefault();
+    hasCleanedUpServers = true;
+
+    try {
+        await serverManager.stopServer();
+    } catch (err) {
+        console.error('Failed to stop servers on quit:', err);
+    }
+
+    if (tray) {
+        tray.destroy();
+        tray = null;
+    }
+
+    app.exit(0);
 });
 
 app.on('window-all-closed', () => {

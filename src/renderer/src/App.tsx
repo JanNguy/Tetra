@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Route, LogEntry, Tab, ServerSettings } from "./types";
 import { colors } from "./constants/theme";
 
@@ -24,6 +24,11 @@ interface ProjectState {
     serverSettings: ServerSettings;
     serverStatus: "stopped" | "running";
     serverTransition: ServerTransition;
+}
+
+interface PendingRestart {
+    routes: Route[];
+    settings: ServerSettings;
 }
 
 const createDefaultServerSettings = (name = "My API Server"): ServerSettings => ({
@@ -53,6 +58,25 @@ const normalizeServerSettings = (value: any, fallbackName: string): ServerSettin
     runtime: value && value.runtime === "podman" ? "podman" : "local",
 });
 
+const createDefaultRouteRequest = () => ({
+    query: "",
+    headers: "",
+    body: "",
+});
+
+const normalizeRoute = (route: any): Route => ({
+    ...route,
+    headers: route && typeof route.headers === "object" && route.headers !== null
+        ? route.headers
+        : { "Content-Type": "application/json" },
+    body: typeof route?.body === "string" ? route.body : '{\n  "message": "Hello World"\n}',
+    request: {
+        ...createDefaultRouteRequest(),
+        ...(route && typeof route.request === "object" ? route.request : {}),
+    },
+    errorOnMissingVariables: Boolean(route?.errorOnMissingVariables),
+});
+
 export default function App() {
     const [activeTab, setActiveTab] = useState<Tab>("routes");
     const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -66,6 +90,8 @@ export default function App() {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [isPortAvailable, setIsPortAvailable] = useState<boolean | null>(null);
     const [isDataLoaded, setIsDataLoaded] = useState(false);
+    const restartTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    const pendingRestartsRef = useRef<Record<string, PendingRestart>>({});
 
     const activeProject =
         projects.find(project => project.id === activeProjectId) || projects[0];
@@ -82,6 +108,67 @@ export default function App() {
         setProjects(prev => prev.map(project => (
             project.id === projectId ? updater(project) : project
         )));
+    };
+
+    const scheduleProjectRestart = (
+        projectId: string,
+        settings: ServerSettings,
+        routes: Route[],
+        delayMs = 250
+    ) => {
+        if (!window.electronAPI) {
+            return;
+        }
+
+        pendingRestartsRef.current[projectId] = { settings, routes };
+
+        const existingTimer = restartTimersRef.current[projectId];
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+        }
+
+        updateProject(projectId, project => ({
+            ...project,
+            serverTransition: "restarting",
+        }));
+
+        restartTimersRef.current[projectId] = setTimeout(async () => {
+            const pendingRestart = pendingRestartsRef.current[projectId];
+            delete restartTimersRef.current[projectId];
+            delete pendingRestartsRef.current[projectId];
+
+            if (!pendingRestart) {
+                updateProject(projectId, project => ({
+                    ...project,
+                    serverTransition: "idle",
+                }));
+                return;
+            }
+
+            try {
+                await window.electronAPI.restartServer(
+                    { ...pendingRestart.settings, projectId },
+                    pendingRestart.routes
+                );
+            } catch (err) {
+                console.error("Failed to restart server:", err);
+            } finally {
+                updateProject(projectId, project => ({
+                    ...project,
+                    serverTransition: "idle",
+                }));
+            }
+        }, delayMs);
+    };
+
+    const cancelProjectRestart = (projectId: string) => {
+        const existingTimer = restartTimersRef.current[projectId];
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+            delete restartTimersRef.current[projectId];
+        }
+
+        delete pendingRestartsRef.current[projectId];
     };
 
     useEffect(() => {
@@ -119,6 +206,12 @@ export default function App() {
     }, []);
 
     useEffect(() => {
+        return () => {
+            Object.values(restartTimersRef.current).forEach(clearTimeout);
+        };
+    }, []);
+
+    useEffect(() => {
         const initData = async () => {
             if (window.electronAPI) {
                 const data = await window.electronAPI.loadData();
@@ -130,7 +223,9 @@ export default function App() {
                             return {
                                 id,
                                 name,
-                                routes: Array.isArray(project.routes) ? project.routes : [],
+                                routes: Array.isArray(project.routes)
+                                    ? project.routes.map(normalizeRoute)
+                                    : [],
                                 serverSettings: normalizeServerSettings(project.serverSettings, name),
                                 serverStatus: "stopped" as const,
                                 serverTransition: "idle" as const,
@@ -142,7 +237,9 @@ export default function App() {
                         setActiveProjectId(nextActive);
                     } else {
                         const legacyProject = createProject("default", "Default Project");
-                        legacyProject.routes = Array.isArray(data.routes) ? data.routes : [];
+                        legacyProject.routes = Array.isArray(data.routes)
+                            ? data.routes.map(normalizeRoute)
+                            : [];
                         legacyProject.serverSettings = normalizeServerSettings(
                             data.serverSettings,
                             legacyProject.name
@@ -164,6 +261,9 @@ export default function App() {
     }, [projects, activeProjectId, isDataLoaded]);
 
     useEffect(() => {
+        if (activeProjectId) {
+            cancelProjectRestart(activeProjectId);
+        }
         setSelectedRouteId(null);
     }, [activeProjectId]);
 
@@ -241,6 +341,7 @@ export default function App() {
         }
 
         try {
+            cancelProjectRestart(activeProject.id);
             updateProject(activeProject.id, project => ({
                 ...project,
                 serverTransition: "stopping",
@@ -280,6 +381,8 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: '{\n  "message": "Hello World"\n}',
             delay: 0,
+            request: createDefaultRouteRequest(),
+            errorOnMissingVariables: false,
         };
 
         const updatedRoutes = [...activeProject.routes, newRoute];
@@ -292,24 +395,7 @@ export default function App() {
         setActiveTab('routes');
 
         if (activeServerStatus === 'running' && window.electronAPI) {
-            try {
-                updateProject(activeProject.id, project => ({
-                    ...project,
-                    serverTransition: "restarting",
-                }));
-
-                await window.electronAPI.restartServer(
-                    { ...activeServerSettings, projectId: activeProject.id },
-                    updatedRoutes
-                );
-            } catch (err) {
-                console.error('Failed to restart server:', err);
-            } finally {
-                updateProject(activeProject.id, project => ({
-                    ...project,
-                    serverTransition: "idle",
-                }));
-            }
+            scheduleProjectRestart(activeProject.id, activeServerSettings, updatedRoutes, 0);
         }
     };
 
@@ -327,25 +413,23 @@ export default function App() {
             routes: updatedRoutes,
         }));
 
-        if (activeServerStatus === 'running' && window.electronAPI) {
-            try {
-                updateProject(activeProject.id, project => ({
-                    ...project,
-                    serverTransition: "restarting",
-                }));
+        const routeFieldsRequiringRestart: Array<keyof Route> = [
+            "path",
+            "method",
+            "status",
+            "statusCode",
+            "headers",
+            "body",
+            "delay",
+            "request",
+            "errorOnMissingVariables",
+        ];
 
-                await window.electronAPI.restartServer(
-                    { ...activeServerSettings, projectId: activeProject.id },
-                    updatedRoutes
-                );
-            } catch (err) {
-                console.error('Failed to restart server:', err);
-            } finally {
-                updateProject(activeProject.id, project => ({
-                    ...project,
-                    serverTransition: "idle",
-                }));
-            }
+        if (
+            activeServerStatus === 'running' &&
+            routeFieldsRequiringRestart.includes(field)
+        ) {
+            scheduleProjectRestart(activeProject.id, activeServerSettings, updatedRoutes);
         }
     };
 
@@ -365,24 +449,7 @@ export default function App() {
         }
 
         if (activeServerStatus === 'running' && window.electronAPI) {
-            try {
-                updateProject(activeProject.id, project => ({
-                    ...project,
-                    serverTransition: "restarting",
-                }));
-
-                await window.electronAPI.restartServer(
-                    { ...activeServerSettings, projectId: activeProject.id },
-                    filteredRoutes
-                );
-            } catch (err) {
-                console.error('Failed to restart server:', err);
-            } finally {
-                updateProject(activeProject.id, project => ({
-                    ...project,
-                    serverTransition: "idle",
-                }));
-            }
+            scheduleProjectRestart(activeProject.id, activeServerSettings, filteredRoutes, 0);
         }
     };
 
@@ -390,6 +457,11 @@ export default function App() {
         if (!activeProject) {
             return;
         }
+
+        const nextSettings = {
+            ...activeProject.serverSettings,
+            [key]: value,
+        };
 
         updateProject(activeProject.id, project => {
             const nextSettings = { ...project.serverSettings, [key]: value };
@@ -403,6 +475,22 @@ export default function App() {
                 serverSettings: nextSettings,
             };
         });
+
+        const settingsRequiringRestart: Array<keyof ServerSettings> = [
+            "runtime",
+            "corsEnabled",
+            "corsOrigin",
+            "delay",
+            "logRequests",
+            "logResponses",
+        ];
+
+        if (
+            activeServerStatus === "running" &&
+            settingsRequiringRestart.includes(key)
+        ) {
+            scheduleProjectRestart(activeProject.id, nextSettings, activeRoutes);
+        }
     };
 
     const handleAddProject = (name?: string) => {

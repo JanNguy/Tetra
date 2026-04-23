@@ -2,12 +2,20 @@ const express = require('express');
 const cors = require('cors');
 const net = require('net');
 const { spawn } = require('child_process');
+const {
+  REQUEST_HELPERS_SCRIPT,
+  buildLiveRequestVariables,
+  findMissingTemplateVariables,
+  resolveResponseBody,
+  validateIncomingRequest,
+} = require('./requestUtils');
 
 const localServers = new Map();
 const podmanContainers = new Map();
 const podmanLogsProcesses = new Map();
 
 const PODMAN_IMAGE = 'docker.io/library/node:20-alpine';
+const TETRA_PODMAN_LABEL = 'tetra.managed=true';
 
 function sanitizeHeader(value) {
   if (typeof value !== 'string') return '';
@@ -20,6 +28,12 @@ function normalizeProjectId(projectId) {
   return String(projectId).replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
+function getResponseStatusCode(route) {
+  return (typeof route.statusCode === 'number' && route.statusCode >= 100 && route.statusCode <= 599)
+    ? route.statusCode
+    : 200;
+}
+
 function hasRunningServer(projectId) {
   return localServers.has(projectId) || podmanContainers.has(projectId);
 }
@@ -29,6 +43,32 @@ function stopPodmanLogs(projectId) {
   if (process) {
     process.kill();
     podmanLogsProcesses.delete(projectId);
+  }
+}
+
+async function cleanupManagedPodmanContainers() {
+  try {
+    const rawContainerIds = await runPodmanCommand([
+      'ps',
+      '-aq',
+      '--filter',
+      `label=${TETRA_PODMAN_LABEL}`,
+    ]);
+
+    const containerIds = rawContainerIds
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    for (const containerId of containerIds) {
+      try {
+        await runPodmanCommand(['rm', '-f', containerId]);
+      } catch (err) {
+        // Best effort cleanup on startup.
+      }
+    }
+  } catch (err) {
+    // Podman may be unavailable; ignore startup cleanup failures.
   }
 }
 
@@ -226,8 +266,38 @@ function createExpressServer(projectId, port, settings, routes, onLog, resolve, 
 
       expressApp[method](route.path, (req, res) => {
         const sendResponse = () => {
-          if (settings.logResponses) {
-            onLog('response', `${route.statusCode} OK - (route: ${route.path})`, projectId);
+          const variables = buildLiveRequestVariables({
+            query: req.query,
+            headers: req.headers,
+            body: req.body,
+            params: req.params,
+            meta: {
+              method: req.method,
+              path: req.path,
+              url: req.originalUrl,
+            },
+          });
+
+          if (route.errorOnMissingVariables) {
+            const missingFields = validateIncomingRequest(route.request, {
+              query: req.query,
+              headers: req.headers,
+              body: req.body,
+            });
+            const missingVariables = findMissingTemplateVariables(route.body, variables);
+            const missing = Array.from(new Set([...missingFields, ...missingVariables]));
+
+            if (missing.length > 0) {
+              if (settings.logResponses) {
+                onLog('response', `400 Missing variables - ${missing.join(', ')}`, projectId);
+              }
+
+              res.status(400).json({
+                message: 'Missing required request variables',
+                missing,
+              });
+              return;
+            }
           }
 
           if (route.headers && typeof route.headers === 'object') {
@@ -235,17 +305,13 @@ function createExpressServer(projectId, port, settings, routes, onLog, resolve, 
               res.setHeader(sanitizeHeader(key), sanitizeHeader(String(value)));
             });
           }
-          
-          let responseBody = route.body || '{"status": "success"}';
-          try {
-            responseBody = JSON.parse(responseBody);
-          } catch(e) {
-            // Keep as string if it's not JSON
-          }
 
-          const statusCode = (typeof route.statusCode === 'number' && route.statusCode >= 100 && route.statusCode <= 599) 
-            ? route.statusCode 
-            : 200;
+          const responseBody = resolveResponseBody(route.body, variables);
+          const statusCode = getResponseStatusCode(route);
+
+          if (settings.logResponses) {
+            onLog('response', `${statusCode} OK - (route: ${route.path})`, projectId);
+          }
 
           res.status(statusCode).send(responseBody);
         };
@@ -330,17 +396,39 @@ function sanitizeHeader(value) {
 const port = Number(process.env.PORT || 3000);
 const settings = JSON.parse(process.env.SETTINGS_JSON || '{}');
 const routes = JSON.parse(process.env.ROUTES_JSON || '[]');
+${REQUEST_HELPERS_SCRIPT}
 
-function parseBody(rawBody) {
-  if (typeof rawBody !== 'string') {
-    return rawBody;
-  }
+function getResponseStatusCode(route) {
+  return (typeof route.statusCode === 'number' && route.statusCode >= 100 && route.statusCode <= 599)
+    ? route.statusCode
+    : 200;
+}
 
-  try {
-    return JSON.parse(rawBody);
-  } catch (err) {
-    return rawBody;
-  }
+function collectRequestBody(req) {
+  return new Promise(resolve => {
+    let rawBody = '';
+
+    req.on('data', chunk => {
+      rawBody += chunk.toString();
+    });
+
+    req.on('end', () => {
+      if (!rawBody) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(rawBody));
+      } catch (err) {
+        resolve(rawBody);
+      }
+    });
+
+    req.on('error', () => {
+      resolve({});
+    });
+  });
 }
 
 const server = http.createServer((req, res) => {
@@ -379,47 +467,77 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const writeResponse = () => {
-    if (route.headers && typeof route.headers === 'object') {
-      Object.entries(route.headers).forEach(([key, value]) => {
-        res.setHeader(sanitizeHeader(String(key)), sanitizeHeader(String(value)));
+  collectRequestBody(req).then(requestBody => {
+    const writeResponse = () => {
+      const variables = buildLiveRequestVariables({
+        query: Object.fromEntries(url.searchParams.entries()),
+        headers: req.headers,
+        body: requestBody,
+        params: {},
+        meta: {
+          method,
+          path: pathname,
+          url: req.url || pathname,
+        },
       });
+
+      if (route.errorOnMissingVariables) {
+        const missingFields = validateIncomingRequest(route.request, {
+          query: Object.fromEntries(url.searchParams.entries()),
+          headers: req.headers,
+          body: requestBody,
+        });
+        const missingVariables = findMissingTemplateVariables(route.body, variables);
+        const missing = Array.from(new Set(missingFields.concat(missingVariables)));
+
+        if (missing.length > 0) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          console.log('RES 400 ' + method + ' ' + pathname + ' (missing variables)');
+          res.end(JSON.stringify({
+            message: 'Missing required request variables',
+            missing,
+          }));
+          return;
+        }
+      }
+
+      if (route.headers && typeof route.headers === 'object') {
+        Object.entries(route.headers).forEach(([key, value]) => {
+          res.setHeader(sanitizeHeader(String(key)), sanitizeHeader(String(value)));
+        });
+      }
+
+      const statusCode = getResponseStatusCode(route);
+      const body = resolveResponseBody(route.body, variables);
+
+      res.statusCode = statusCode;
+      if (settings.logResponses) {
+        const size = typeof body === 'string' ? body.length : JSON.stringify(body).length;
+        console.log('RES ' + statusCode + ' ' + method + ' ' + pathname + ' (' + size + ' bytes)');
+      }
+
+      if (typeof body === 'string') {
+        res.end(body);
+        return;
+      }
+
+      if (!res.getHeader('Content-Type')) {
+        res.setHeader('Content-Type', 'application/json');
+      }
+      res.end(JSON.stringify(body));
+    };
+
+    const globalDelay = Number(settings.delay) >= 0 ? Number(settings.delay) : 0;
+    const routeDelay = Number(route.delay) >= 0 ? Number(route.delay) : 0;
+    const totalDelay = globalDelay + routeDelay;
+
+    if (totalDelay > 0) {
+      setTimeout(writeResponse, totalDelay);
+    } else {
+      writeResponse();
     }
-
-    const statusCode = (
-      typeof route.statusCode === 'number' &&
-      route.statusCode >= 100 &&
-      route.statusCode <= 599
-    ) ? route.statusCode : 200;
-
-    const body = parseBody(route.body || '{"status":"success"}');
-
-    res.statusCode = statusCode;
-    if (settings.logResponses) {
-      const size = typeof body === 'string' ? body.length : JSON.stringify(body).length;
-      console.log('RES ' + statusCode + ' ' + method + ' ' + pathname + ' (' + size + ' bytes)');
-    }
-
-    if (typeof body === 'string') {
-      res.end(body);
-      return;
-    }
-
-    if (!res.getHeader('Content-Type')) {
-      res.setHeader('Content-Type', 'application/json');
-    }
-    res.end(JSON.stringify(body));
-  };
-
-  const globalDelay = Number(settings.delay) >= 0 ? Number(settings.delay) : 0;
-  const routeDelay = Number(route.delay) >= 0 ? Number(route.delay) : 0;
-  const totalDelay = globalDelay + routeDelay;
-
-  if (totalDelay > 0) {
-    setTimeout(writeResponse, totalDelay);
-  } else {
-    writeResponse();
-  }
+  });
 });
 
 server.listen(port, '0.0.0.0');
@@ -436,6 +554,8 @@ function createPodmanServer(projectId, port, settings, routes, onLog, resolve, r
     '--rm',
     '--name',
     containerName,
+    '--label',
+    TETRA_PODMAN_LABEL,
     '-p',
     `${port}:${port}`,
     '-e',
@@ -488,6 +608,7 @@ function checkPortAvailability(port) {
 }
 
 module.exports = {
+  cleanupManagedPodmanContainers,
   startServer,
   stopServer,
   checkPortAvailability

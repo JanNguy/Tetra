@@ -12,6 +12,12 @@ export default function RoutesTab({
     updateRoute,
     deleteRoute,
 }: RoutesTabProps) {
+    const requestConfig = selectedRoute?.request || {
+        query: "",
+        headers: "",
+        body: "",
+    };
+
     if (!selectedRoute) {
         return (
             <div className="flex-1 overflow-y-auto p-6">
@@ -256,6 +262,143 @@ export default function RoutesTab({
                                 resize: 'vertical',
                             }}
                         />
+                    </div>
+
+                    <div
+                        className="col-span-2 rounded-xl p-5 border"
+                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    >
+                        <div className="mb-4">
+                            <h3
+                                className="text-xs font-medium uppercase tracking-wide mb-2"
+                                style={{ color: colors.textMuted }}
+                            >
+                                Request
+                            </h3>
+                            <p
+                                className="text-sm"
+                                style={{ color: colors.textSecondary }}
+                            >
+                                Define the variables expected from query params, headers and body. Use them in the response with <span className="font-mono">$name</span>, <span className="font-mono">$body.email</span> or <span className="font-mono">$headers.authorization</span>.
+                            </p>
+                        </div>
+
+                        <div
+                            className="flex items-center justify-between rounded-lg p-4 mb-4"
+                            style={{ backgroundColor: colors.primary }}
+                        >
+                            <div>
+                                <p style={{ color: colors.textPrimary }}>
+                                    Error If Missing Variable
+                                </p>
+                                <p
+                                    className="text-xs"
+                                    style={{ color: colors.textMuted }}
+                                >
+                                    Return `400` if a configured field or a `$variable` used in the response is missing in the real request.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() =>
+                                    updateRoute(
+                                        selectedRoute.id,
+                                        "errorOnMissingVariables",
+                                        !selectedRoute.errorOnMissingVariables
+                                    )
+                                }
+                                className="relative w-14 h-7 rounded-full transition-colors"
+                                style={{
+                                    backgroundColor: selectedRoute.errorOnMissingVariables
+                                        ? colors.accent
+                                        : colors.border,
+                                }}
+                            >
+                                <span
+                                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                                        selectedRoute.errorOnMissingVariables
+                                            ? "translate-x-7"
+                                            : "translate-x-0"
+                                    }`}
+                                />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                            <div>
+                                <p
+                                    className="text-xs uppercase tracking-wide mb-2"
+                                    style={{ color: colors.textMuted }}
+                                >
+                                    Query Example
+                                </p>
+                                <textarea
+                                    value={requestConfig.query}
+                                    onChange={(e) =>
+                                        updateRoute(selectedRoute.id, "request", {
+                                            ...requestConfig,
+                                            query: e.target.value,
+                                        })
+                                    }
+                                    placeholder={'{\n  "search": "",\n  "page": ""\n}'}
+                                    className="w-full min-h-[92px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    style={{
+                                        backgroundColor: colors.background,
+                                        color: colors.textPrimary,
+                                        resize: "vertical",
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <p
+                                    className="text-xs uppercase tracking-wide mb-2"
+                                    style={{ color: colors.textMuted }}
+                                >
+                                    Headers Example
+                                </p>
+                                <textarea
+                                    value={requestConfig.headers}
+                                    onChange={(e) =>
+                                        updateRoute(selectedRoute.id, "request", {
+                                            ...requestConfig,
+                                            headers: e.target.value,
+                                        })
+                                    }
+                                    placeholder={'{\n  "authorization": "",\n  "x-api-key": ""\n}'}
+                                    className="w-full min-h-[92px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    style={{
+                                        backgroundColor: colors.background,
+                                        color: colors.textPrimary,
+                                        resize: "vertical",
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <p
+                                    className="text-xs uppercase tracking-wide mb-2"
+                                    style={{ color: colors.textMuted }}
+                                >
+                                    Body Example
+                                </p>
+                                <textarea
+                                    value={requestConfig.body}
+                                    onChange={(e) =>
+                                        updateRoute(selectedRoute.id, "request", {
+                                            ...requestConfig,
+                                            body: e.target.value,
+                                        })
+                                    }
+                                    placeholder={'{\n  "name": "",\n  "email": ""\n}'}
+                                    className="w-full min-h-[92px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    style={{
+                                        backgroundColor: colors.background,
+                                        color: colors.textPrimary,
+                                        resize: "vertical",
+                                    }}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

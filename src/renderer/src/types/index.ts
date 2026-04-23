@@ -1,3 +1,9 @@
+export interface RouteRequestConfig {
+    query: string;
+    headers: string;
+    body: string;
+}
+
 export interface Route {
     id: string;
     path: string;
@@ -9,6 +15,8 @@ export interface Route {
     headers: Record<string, string>;
     body: string;
     delay?: number;
+    request?: RouteRequestConfig;
+    errorOnMissingVariables?: boolean;
 }
 
 export interface LogEntry {
