@@ -38,7 +38,7 @@ export interface LogEntry {
     message: string;
 }
 
-export type Tab = "routes" | "server" | "settings";
+export type Tab = "routes" | "server" | "logs" | "settings";
 
 export type ServerRuntime = "local" | "podman";
 

@@ -1,27 +1,30 @@
 export const colors = {
-    primary: "#0B1F3A",
-    secondary: "#132F4C",
-    accent: "#3A7BFF",
-    background: "#0A0F1C",
-    surface: "#111827",
-    border: "#1F2A3A",
-    success: "#22C55E",
-    warning: "#F59E0B",
-    error: "#EF4444",
-    info: "#3A7BFF",
-    textPrimary: "#E5E7EB",
-    textSecondary: "#9CA3AF",
-    textMuted: "#6B7280",
+    primary: "#007AFF",
+    secondary: "#E9EEF7",
+    accent: "#007AFF",
+    background: "#F5F5F7",
+    surface: "#FFFFFF",
+    panel: "#FBFBFD",
+    border: "#D8DCE4",
+    borderStrong: "#C7CDD8",
+    success: "#34C759",
+    warning: "#FF9F0A",
+    error: "#FF3B30",
+    info: "#5AC8FA",
+    textPrimary: "#101828",
+    textSecondary: "#475467",
+    textMuted: "#667085",
+    textSoft: "#98A2B3",
 };
 
 export const getMethodColor = (method: string) => {
     switch (method) {
-        case "GET": return "bg-blue-600";
-        case "POST": return "bg-green-600";
-        case "PUT": return "bg-orange-600";
-        case "DELETE": return "bg-red-600";
-        case "PATCH": return "bg-yellow-600";
-        default: return "bg-gray-600";
+        case "GET": return "bg-emerald-500";
+        case "POST": return "bg-sky-500";
+        case "PUT": return "bg-amber-500";
+        case "DELETE": return "bg-red-500";
+        case "PATCH": return "bg-indigo-500";
+        default: return "bg-slate-500";
     }
 };
 

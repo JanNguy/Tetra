@@ -783,6 +783,37 @@ export default function App() {
         );
     };
 
+    const duplicateRoute = (id: string) => {
+        if (!activeProject) {
+            return;
+        }
+
+        const sourceRoute = activeProject.routes.find(route => route.id === id);
+        if (!sourceRoute) {
+            return;
+        }
+
+        const nextPath = createUniqueRoutePath(
+            activeProject.routes,
+            sourceRoute.method,
+            sourceRoute.path
+        );
+
+        const duplicatedRoute: Route = {
+            ...sourceRoute,
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            path: nextPath,
+            description: sourceRoute.description
+                ? `${sourceRoute.description} Copy`
+                : "Duplicated Route",
+        };
+
+        const updatedRoutes = [...activeProject.routes, duplicatedRoute];
+        setSelectedRouteId(duplicatedRoute.id);
+        setActiveTab("routes");
+        applyRoutesUpdate(activeProject.id, updatedRoutes, activeServerStatus === "running" ? 0 : undefined);
+    };
+
     const deleteSelectedRoutes = async () => {
         if (!activeProject || selectedRouteIds.length === 0) {
             return;
@@ -910,8 +941,8 @@ export default function App() {
     if (!isDataLoaded) {
         return (
             <div
-                className="h-screen flex items-center justify-center text-white"
-                style={{ backgroundColor: colors.background }}
+                className="h-screen flex items-center justify-center"
+                style={{ backgroundColor: colors.background, color: colors.textPrimary }}
             >
                 Loading...
             </div>
@@ -920,11 +951,11 @@ export default function App() {
 
     return (
         <div
-            className="h-screen flex flex-col"
+            className="app-shell h-screen flex flex-col p-4"
             style={{
                 backgroundColor: colors.background,
                 color: colors.textPrimary,
-                fontFamily: 'Inter, system-ui, sans-serif',
+                fontFamily: '"Inter", "SF Pro Display", "Segoe UI Variable", sans-serif',
             }}
         >
             <Header
@@ -940,7 +971,10 @@ export default function App() {
                 onAddProject={handleAddProject}
             />
 
-            <div className="flex-1 flex overflow-hidden">
+            <div
+                className="glass-panel relative z-10 flex flex-1 overflow-hidden rounded-[28px] border"
+                style={{ borderColor: colors.border, boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)" }}
+            >
                 <Sidebar
                     sidebarCollapsed={sidebarCollapsed}
                     setSidebarCollapsed={setSidebarCollapsed}
@@ -956,14 +990,16 @@ export default function App() {
                     onDeleteSelectedRoutes={deleteSelectedRoutes}
                     onAddRoute={handleAddRoute}
                     methodFilter={methodFilter}
+                    setMethodFilter={setMethodFilter}
                 />
 
-                <main className="flex-1 flex flex-col overflow-hidden">
+                <main className="flex-1 flex flex-col overflow-hidden bg-transparent">
                     {activeTab === 'routes' && (
                         <RoutesTab
                             selectedRoute={selectedRoute}
                             updateRoute={updateRoute}
                             deleteRoute={deleteRoute}
+                            duplicateRoute={duplicateRoute}
                         />
                     )}
 
@@ -980,6 +1016,10 @@ export default function App() {
                         />
                     )}
 
+                    {activeTab === 'logs' && (
+                        <LogsPanel logs={logs} setLogs={setLogs} variant="full" />
+                    )}
+
                     {activeTab === 'settings' && (
                         <SettingsTab
                             serverSettings={activeServerSettings}
@@ -989,7 +1029,9 @@ export default function App() {
                         />
                     )}
 
-                    <LogsPanel logs={logs} setLogs={setLogs} />
+                    {activeTab !== "logs" && (
+                        <LogsPanel logs={logs} setLogs={setLogs} />
+                    )}
                 </main>
             </div>
         </div>

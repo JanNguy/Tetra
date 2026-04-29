@@ -27,8 +27,8 @@ export default function ServerTab({
     const [importValue, setImportValue] = useState("");
     const [importError, setImportError] = useState<string | null>(null);
     const [isParserOpen, setIsParserOpen] = useState(false);
-    const isTransitioning = serverTransition !== "idle";
 
+    const isTransitioning = serverTransition !== "idle";
     const transitionLabel =
         serverTransition === "starting"
             ? "Starting..."
@@ -83,11 +83,7 @@ export default function ServerTab({
             return;
         }
 
-        if (
-            closingCharacters.has(key) &&
-            selectionStart === selectionEnd &&
-            nextCharacter === key
-        ) {
+        if (closingCharacters.has(key) && selectionStart === selectionEnd && nextCharacter === key) {
             event.preventDefault();
             requestAnimationFrame(() => {
                 currentTarget.selectionStart = selectionStart + 1;
@@ -102,215 +98,214 @@ export default function ServerTab({
             await onImportRoutes(importValue);
             setImportValue("");
             setIsParserOpen(false);
-        } catch (err) {
-            setImportError(err instanceof Error ? err.message : "Failed to import routes");
+        } catch (error) {
+            setImportError(error instanceof Error ? error.message : "Failed to import routes");
         }
     };
 
+    const runtimeCards = [
+        {
+            key: "local",
+            title: "Node.js Runtime",
+            subtitle: "Fast local execution for iteration and debugging.",
+            configured: serverSettings.runtime === "local",
+        },
+        {
+            key: "podman",
+            title: "Podman Runtime",
+            subtitle: "Containerized execution for environment parity and isolation.",
+            configured: serverSettings.runtime === "podman",
+        },
+    ];
+
     return (
-        <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-2xl mx-auto space-y-8">
-                <div>
-                    <h2 className="text-2xl font-bold mb-2">Server Control</h2>
-                    <p className="text-sm" style={{ color: colors.textSecondary }}>
-                        Start or stop your mock API server
-                    </p>
-                </div>
-
-                <div
-                    className="rounded-xl p-6 border"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                >
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 className="font-medium mb-1">
-                                {serverSettings.name || 'Unnamed Server'}
-                            </h3>
-                            <p
-                                className="text-sm"
-                                style={{ color: colors.textSecondary }}
-                            >
-                                {serverStatus === 'running'
-                                    ? `Running on port ${serverSettings.port}`
-                                    : 'Not running'}
-                            </p>
-                            <p
-                                className="text-xs mt-1 uppercase tracking-wide"
-                                style={{ color: colors.textMuted }}
-                            >
-                                Runtime: {serverSettings.runtime === 'podman' ? 'Podman' : 'Local'}
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span
-                                className={`w-3 h-3 rounded-full ${
-                                    isTransitioning
-                                        ? 'bg-yellow-500 animate-pulse'
-                                        : serverStatus === 'running'
-                                        ? 'bg-green-500'
-                                        : 'bg-gray-500'
-                                }`}
-                            />
-                            <span
-                                className="text-sm capitalize"
-                                style={{ color: colors.textSecondary }}
-                            >
-                                {transitionLabel || serverStatus}
-                            </span>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={
-                            serverStatus === 'running'
-                                ? onStopServer
-                                : onStartServer
-                        }
-                        disabled={
-                            isTransitioning ||
-                            !serverSettings.name ||
-                            !serverSettings.port ||
-                            (serverStatus === 'stopped' &&
-                                isPortAvailable === false)
-                        }
-                        className="w-full py-3 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                            backgroundColor:
-                                serverStatus === 'running'
-                                    ? colors.error
-                                    : colors.success,
-                            color: 'white',
-                        }}
-                    >
-                        {transitionLabel || (serverStatus === 'running'
-                            ? 'Stop Server'
-                            : 'Start Server')}
-                    </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                    <div
-                        className="rounded-xl p-4 border text-center"
-                        style={{
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                        }}
-                    >
-                        <p
-                            className="text-2xl font-bold font-mono"
-                            style={{ color: colors.accent }}
-                        >
-                            {routes.length}
-                        </p>
-                        <p className="text-xs" style={{ color: colors.textMuted }}>
-                            Total Routes
-                        </p>
-                    </div>
-                    <div
-                        className="rounded-xl p-4 border text-center"
-                        style={{
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                        }}
-                    >
-                        <p
-                            className="text-2xl font-bold font-mono"
-                            style={{ color: colors.success }}
-                        >
-                            {routes.filter(r => r.status === 'active').length}
-                        </p>
-                        <p className="text-xs" style={{ color: colors.textMuted }}>
-                            Active
-                        </p>
-                    </div>
-                    <div
-                        className="rounded-xl p-4 border text-center"
-                        style={{
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                        }}
-                    >
-                        <p
-                            className="text-2xl font-bold font-mono"
-                            style={{ color: colors.error }}
-                        >
-                            {routes.filter(r => r.status === 'error').length}
-                        </p>
-                        <p className="text-xs" style={{ color: colors.textMuted }}>
-                            Errors
-                        </p>
-                    </div>
-                </div>
-
-                <div
-                    className="rounded-xl p-6 border"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                >
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h3 className="font-medium mb-1">JSON Route Parser</h3>
-                            <p className="text-sm" style={{ color: colors.textSecondary }}>
-                                Open the parser popup to paste a JSON array of routes or an object with a `routes` array.
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => {
-                                setImportError(null);
-                                setIsParserOpen(true);
-                            }}
-                            className="px-4 py-2 rounded-lg font-medium transition-all"
-                            style={{ backgroundColor: colors.accent, color: "white" }}
-                        >
-                            Parser
-                        </button>
-                    </div>
-                </div>
+        <div className="subtle-grid flex-1 overflow-y-auto p-6">
+            <div className="mb-5">
+                <h2 className="mt-2 text-[1.8rem] font-semibold tracking-[-0.04em]" style={{ color: colors.textPrimary }}>
+                    Launch and monitor mock runtimes
+                </h2>
             </div>
 
-            {isParserOpen && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-6"
-                    style={{ backgroundColor: "rgba(15, 23, 42, 0.72)" }}
-                >
-                    <div
-                        className="w-full max-w-3xl rounded-2xl border shadow-2xl"
-                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                    >
-                        <div
-                            className="flex items-center justify-between px-6 py-4 border-b"
-                            style={{ borderColor: colors.border }}
-                        >
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_360px]">
+                <section className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-2">
+                        {runtimeCards.map(card => (
+                            <div key={card.key} className="soft-card rounded-[24px] p-5">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-lg font-semibold tracking-[-0.02em]" style={{ color: colors.textPrimary }}>
+                                            {card.title}
+                                        </p>
+                                        <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>
+                                            {card.subtitle}
+                                        </p>
+                                    </div>
+                                    {card.configured && (
+                                        <span
+                                            className="rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+                                            style={{ backgroundColor: "rgba(0, 122, 255, 0.08)", color: colors.accent }}
+                                        >
+                                            Active
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="mt-5 grid grid-cols-2 gap-3">
+                                    <div className="rounded-[18px] border px-3 py-3" style={{ borderColor: colors.border, backgroundColor: colors.panel }}>
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                            Status
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold" style={{ color: card.configured && serverStatus === "running" ? colors.success : colors.textSecondary }}>
+                                            {card.configured ? serverStatus : "stopped"}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-[18px] border px-3 py-3" style={{ borderColor: colors.border, backgroundColor: colors.panel }}>
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                            Port
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold" style={{ color: colors.textPrimary }}>
+                                            {card.configured ? serverSettings.port || "Unset" : "Inactive"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-5 flex items-center justify-between">
+                                    <span className="text-xs" style={{ color: colors.textMuted }}>
+                                        {card.configured
+                                            ? "Configured runtime for this workspace"
+                                            : "Switch in Settings to activate"}
+                                    </span>
+                                    {card.configured && (
+                                        <button
+                                            onClick={serverStatus === "running" ? onStopServer : onStartServer}
+                                            disabled={isTransitioning || (serverStatus === "stopped" && isPortAvailable === false)}
+                                            className="rounded-[16px] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                            style={{ backgroundColor: serverStatus === "running" ? colors.error : colors.accent }}
+                                        >
+                                            {transitionLabel || (serverStatus === "running" ? "Stop" : "Start")}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <div className="soft-card rounded-[24px] p-4">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                Total Routes
+                            </p>
+                            <p className="mt-2 text-3xl font-semibold tracking-[-0.03em]" style={{ color: colors.textPrimary }}>
+                                {routes.length}
+                            </p>
+                        </div>
+                        <div className="soft-card rounded-[24px] p-4">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                Enabled
+                            </p>
+                            <p className="mt-2 text-3xl font-semibold tracking-[-0.03em]" style={{ color: colors.success }}>
+                                {routes.filter(route => route.status === "active").length}
+                            </p>
+                        </div>
+                        <div className="soft-card rounded-[24px] p-4">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                Port Health
+                            </p>
+                            <p className="mt-2 text-lg font-semibold" style={{ color: isPortAvailable === false ? colors.error : colors.textPrimary }}>
+                                {isPortAvailable === false ? "Conflict" : "Ready"}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="soft-card rounded-[24px] p-5">
+                        <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="font-medium">Route Parser</h3>
-                                <p className="text-sm" style={{ color: colors.textSecondary }}>
-                                    Paste your JSON here to create multiple routes at once.
+                                <p className="text-sm font-semibold" style={{ color: colors.textPrimary }}>
+                                    Route Import
                                 </p>
                             </div>
                             <button
+                                onClick={() => {
+                                    setImportError(null);
+                                    setIsParserOpen(true);
+                                }}
+                                className="rounded-[16px] px-4 py-2 text-sm font-semibold text-white"
+                                style={{ backgroundColor: colors.accent }}
+                            >
+                                Open parser
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <aside className="space-y-6">
+                    <div className="soft-card rounded-[24px] p-5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: colors.textSoft }}>
+                            Current Runtime
+                        </p>
+                        <p className="mt-2 text-xl font-semibold tracking-[-0.02em]" style={{ color: colors.textPrimary }}>
+                            {serverSettings.runtime === "podman" ? "Podman" : "Node.js"}
+                        </p>
+                        <div className="mt-4 space-y-3">
+                            <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.panel }}>
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                    Status
+                                </p>
+                                <p className="mt-1 text-sm font-semibold" style={{ color: serverStatus === "running" ? colors.success : colors.textPrimary }}>
+                                    {transitionLabel || serverStatus}
+                                </p>
+                            </div>
+                            <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.panel }}>
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                    Port
+                                </p>
+                                <p className="mt-1 text-sm font-semibold" style={{ color: colors.textPrimary }}>
+                                    {serverSettings.port || "Unset"}
+                                </p>
+                            </div>
+                            <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.panel }}>
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: colors.textSoft }}>
+                                    Readiness
+                                </p>
+                                <p className="mt-1 text-sm font-semibold" style={{ color: isPortAvailable === false ? colors.error : colors.textPrimary }}>
+                                    {isPortAvailable === false ? "Port conflict detected" : "Ready to start"}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                </aside>
+            </div>
+
+            {isParserOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ backgroundColor: "rgba(15, 23, 42, 0.24)" }}>
+                    <div className="w-full max-w-4xl rounded-[28px] border shadow-2xl" style={{ backgroundColor: colors.surface, borderColor: colors.borderStrong }}>
+                        <div className="flex items-center justify-between border-b px-6 py-5" style={{ borderColor: colors.border }}>
+                            <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: colors.textSoft }}>
+                                    Route Parser
+                                </p>
+                                <h3 className="mt-1 text-xl font-semibold tracking-[-0.02em]" style={{ color: colors.textPrimary }}>
+                                    Import mock routes from JSON
+                                </h3>
+                            </div>
+                            <button
                                 onClick={() => setIsParserOpen(false)}
-                                className="px-3 py-1 rounded-md text-sm transition-colors"
-                                style={{ color: colors.textMuted }}
+                                className="rounded-[16px] border px-3 py-2 text-sm"
+                                style={{ borderColor: colors.border, color: colors.textMuted }}
                             >
                                 Close
                             </button>
                         </div>
 
                         <div className="p-6">
-                            <div className="mb-4">
-                                <p className="text-sm" style={{ color: colors.textSecondary }}>
-                                    Supported formats:
-                                </p>
-                                <p className="text-xs font-mono mt-1" style={{ color: colors.textMuted }}>
-                                    `[{'{'} ... {'}'}]` or `{`"routes": [{'{'} ... {'}'}]`}`
-                                </p>
-                            </div>
-
+                            <p className="mb-3 text-sm" style={{ color: colors.textMuted }}>
+                                Supported formats: an array of routes or an object with a `routes` array.
+                            </p>
                             <textarea
                                 value={importValue}
-                                onChange={(e) => setImportValue(e.target.value)}
-                                onKeyDown={(e) =>
-                                    handleEditorKeyDown(e, importValue, setImportValue)
-                                }
+                                onChange={(event) => setImportValue(event.target.value)}
+                                onKeyDown={(event) => handleEditorKeyDown(event, importValue, setImportValue)}
                                 placeholder={`[
   {
     "method": "GET",
@@ -321,16 +316,12 @@ export default function ServerTab({
     }
   }
 ]`}
-                                className="w-full min-h-[320px] font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                style={{
-                                    backgroundColor: colors.primary,
-                                    color: colors.textPrimary,
-                                    resize: "vertical",
-                                }}
+                                className="focus-ring field-shell min-h-[340px] w-full rounded-[24px] p-4 font-mono text-sm"
+                                style={{ color: colors.textPrimary, resize: "vertical" }}
                             />
 
                             {importError && (
-                                <p className="text-sm mt-3" style={{ color: colors.error }}>
+                                <p className="mt-3 text-sm font-medium" style={{ color: colors.error }}>
                                     {importError}
                                 </p>
                             )}
@@ -338,16 +329,16 @@ export default function ServerTab({
                             <div className="mt-5 flex justify-end gap-3">
                                 <button
                                     onClick={() => setIsParserOpen(false)}
-                                    className="px-4 py-2 rounded-lg font-medium transition-all"
-                                    style={{ backgroundColor: colors.primary, color: colors.textPrimary }}
+                                    className="rounded-[16px] border px-4 py-2 text-sm font-medium"
+                                    style={{ borderColor: colors.border, color: colors.textSecondary }}
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleImport}
                                     disabled={!importValue.trim() || isTransitioning}
-                                    className="px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                    style={{ backgroundColor: colors.accent, color: "white" }}
+                                    className="rounded-[16px] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                    style={{ backgroundColor: colors.accent }}
                                 >
                                     Import Routes
                                 </button>

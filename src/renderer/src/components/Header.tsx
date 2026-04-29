@@ -32,8 +32,6 @@ export default function Header({
     const projectMenuRef = useRef<HTMLDivElement | null>(null);
     const newProjectInputRef = useRef<HTMLInputElement | null>(null);
 
-    const isTransitioning = serverTransition !== "idle";
-
     const activeProject = useMemo(
         () => projects.find(project => project.id === activeProjectId) || projects[0],
         [projects, activeProjectId]
@@ -41,11 +39,7 @@ export default function Header({
 
     useEffect(() => {
         const onDocumentClick = (event: MouseEvent) => {
-            if (!projectMenuRef.current) {
-                return;
-            }
-
-            if (!projectMenuRef.current.contains(event.target as Node)) {
+            if (projectMenuRef.current && !projectMenuRef.current.contains(event.target as Node)) {
                 setIsProjectMenuOpen(false);
             }
         };
@@ -54,155 +48,140 @@ export default function Header({
         return () => document.removeEventListener("mousedown", onDocumentClick);
     }, []);
 
-    const transitionLabel =
+    const isTransitioning = serverTransition !== "idle";
+    const runtimeLabel = serverSettings.runtime === "podman" ? "Podman" : "Node.js";
+    const runtimeStateLabel =
         serverTransition === "starting"
-            ? "Starting..."
+            ? "Starting"
             : serverTransition === "stopping"
-              ? "Stopping..."
+              ? "Stopping"
               : serverTransition === "restarting"
-                ? "Restarting..."
-                : null;
+                ? "Restarting"
+                : serverStatus === "running"
+                  ? "Running"
+                  : "Stopped";
 
     return (
         <header
-            className="h-16 flex items-center justify-between px-6 border-b"
-            style={{ backgroundColor: colors.primary, borderColor: colors.border }}
+            className="relative z-30 mb-3 flex min-h-14 items-center justify-between rounded-[16px] border px-4 py-2.5"
+            style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                boxShadow: "0 4px 14px rgba(16, 24, 40, 0.04)",
+            }}
         >
-            <div className="flex items-center gap-6">
-                <div className="flex items-center gap-3">
-                    <img
-                        src="./logo.png"
-                        alt="Tetra logo"
-                        className="w-12 h-12 object-contain"
-                    />
-                    <h1
-                        className="text-xl font-bold tracking-tight"
-                        style={{ color: colors.accent }}
-                    >
-                        Tetra
-                    </h1>
+            <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2.5">
+                    <img src="./logo.png" alt="Tetra logo" className="h-7 w-7 rounded-md object-contain" />
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-sm font-semibold" style={{ color: colors.textPrimary }}>
+                            Tetra
+                        </h1>
+                        <span className="text-xs" style={{ color: colors.textMuted }}>
+                            Mock API
+                        </span>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-sm" style={{ color: colors.textSecondary }}>
-                        Project:
-                    </span>
-                    <div className="relative" ref={projectMenuRef}>
-                        <button
-                            onClick={() => {
-                                setIsProjectMenuOpen(open => !open);
-                                if (!isProjectMenuOpen) {
-                                    setTimeout(() => newProjectInputRef.current?.focus(), 50);
-                                }
-                            }}
-                            className="flex items-center justify-between gap-2 border border-slate-600 rounded-md px-3 py-1 text-sm min-w-44 focus:outline-none"
-                            style={{ backgroundColor: colors.surface, color: colors.textPrimary }}
-                        >
-                            <span className="truncate">{activeProject?.name || "Select project"}</span>
-                            <svg
-                                className={`w-4 h-4 transition-transform ${isProjectMenuOpen ? "rotate-180" : ""}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 9l-7 7-7-7"
-                                />
-                            </svg>
-                        </button>
 
-                        {isProjectMenuOpen && (
-                            <div
-                                className="absolute mt-2 w-64 rounded-lg border shadow-lg z-50 py-1"
-                                style={{
-                                    backgroundColor: colors.primary,
-                                    borderColor: colors.border,
-                                }}
-                            >
+                <div className="relative z-40" ref={projectMenuRef}>
+                    <button
+                        onClick={() => {
+                            setIsProjectMenuOpen(open => !open);
+                            if (!isProjectMenuOpen) {
+                                setTimeout(() => newProjectInputRef.current?.focus(), 50);
+                            }
+                        }}
+                        className="flex min-w-64 items-center justify-between rounded-[10px] border px-3 py-2 text-left"
+                        style={{ borderColor: colors.border, backgroundColor: "#FAFAFA", color: colors.textPrimary }}
+                    >
+                        <div>
+                            <p className="text-sm font-medium">{activeProject?.name || "Workspace"}</p>
+                            <p className="text-xs" style={{ color: colors.textMuted }}>
+                                Current collection
+                            </p>
+                        </div>
+                        <svg className={`h-4 w-4 transition-transform ${isProjectMenuOpen ? "rotate-180" : ""}`} fill="none" stroke={colors.textMuted} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+
+                    {isProjectMenuOpen && (
+                        <div
+                            className="absolute left-0 top-[calc(100%+8px)] z-50 w-full rounded-[12px] border p-2 shadow-xl"
+                            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                        >
+                            <div className="max-h-60 overflow-y-auto">
                                 {projects.map(project => (
-                                    <div
+                                    <button
                                         key={project.id}
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
+                                        onMouseDown={(event) => {
+                                            event.preventDefault();
                                             onSelectProject(project.id);
                                             setIsProjectMenuOpen(false);
                                         }}
-                                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors cursor-pointer"
-                                        style={{
-                                            color: project.id === activeProjectId
-                                                ? colors.accent
-                                                : colors.textPrimary,
-                                        }}
+                                        className="mb-1 flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left hover:bg-slate-50"
                                     >
-                                        {project.name}
-                                    </div>
+                                        <span style={{ color: project.id === activeProjectId ? colors.accent : colors.textPrimary }} className="text-sm">
+                                            {project.name}
+                                        </span>
+                                        {project.id === activeProjectId && (
+                                            <span className="text-xs" style={{ color: colors.accent }}>
+                                                Active
+                                            </span>
+                                        )}
+                                    </button>
                                 ))}
-                                <div
-                                    className="my-1 border-t"
-                                    style={{ borderColor: colors.border }}
-                                />
-                                <div className="px-3 py-2">
-                                    <input
-                                        ref={newProjectInputRef}
-                                        type="text"
-                                        value={projectInputValue}
-                                        onChange={(e) => setProjectInputValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter" && projectInputValue.trim()) {
-                                                onAddProject(projectInputValue.trim());
-                                                setIsProjectMenuOpen(false);
-                                                setProjectInputValue("");
-                                            } else if (e.key === "Escape") {
-                                                setIsProjectMenuOpen(false);
-                                                setProjectInputValue("");
-                                            }
-                                        }}
-                                        placeholder="New project name..."
-                                        className="w-full bg-transparent text-sm border-b border-slate-600 focus:border-blue-500 focus:outline-none pb-1"
-                                        style={{ color: colors.textPrimary }}
-                                    />
-                                </div>
                             </div>
-                        )}
-                    </div>
+
+                            <div className="mt-2 border-t pt-2" style={{ borderColor: colors.border }}>
+                                <input
+                                    ref={newProjectInputRef}
+                                    type="text"
+                                    value={projectInputValue}
+                                    onChange={(event) => setProjectInputValue(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Enter" && projectInputValue.trim()) {
+                                            onAddProject(projectInputValue.trim());
+                                            setProjectInputValue("");
+                                            setIsProjectMenuOpen(false);
+                                        } else if (event.key === "Escape") {
+                                            setProjectInputValue("");
+                                            setIsProjectMenuOpen(false);
+                                        }
+                                    }}
+                                    placeholder="New collection"
+                                    className="focus-ring w-full rounded-[10px] border px-3 py-2 text-sm"
+                                    style={{ borderColor: colors.border, backgroundColor: "#FAFAFA", color: colors.textPrimary }}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: colors.surface }}>
+            <div className="flex items-center gap-2">
+                <div
+                    className="flex items-center gap-2 rounded-[10px] border px-3 py-2 text-sm"
+                    style={{ borderColor: colors.border, backgroundColor: "#FAFAFA", color: colors.textSecondary }}
+                >
                     <span
-                        className={`w-2 h-2 rounded-full ${
-                            serverStatus === 'running' ? 'bg-green-500 animate-pulse' : 'bg-gray-500'
-                        }`}
+                        className={`h-2 w-2 rounded-full ${serverStatus === "running" ? "animate-pulse" : ""}`}
+                        style={{ backgroundColor: serverStatus === "running" ? colors.success : colors.textSoft }}
                     />
-                    <span className="text-sm" style={{ color: colors.textSecondary }}>
-                        {transitionLabel || (serverStatus === 'running'
-                            ? `${serverSettings.name} :${serverSettings.port}`
-                            : 'Stopped')}
-                    </span>
+                    <span>{runtimeLabel}</span>
+                    <span style={{ color: colors.textMuted }}>·</span>
+                    <span>{runtimeStateLabel}</span>
+                    <span style={{ color: colors.textMuted }}>· {serverSettings.port || "No port"}</span>
                 </div>
 
-                {serverStatus === 'running' ? (
-                    <button
-                        onClick={onStopServer}
-                        disabled={isTransitioning}
-                        className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: colors.error, color: 'white' }}
-                    >
-                        {transitionLabel || 'Stop'}
-                    </button>
-                ) : (
-                    <button
-                        onClick={onStartServer}
-                        disabled={isPortAvailable === false || isTransitioning}
-                        className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: colors.success, color: 'white' }}
-                    >
-                        {transitionLabel || 'Start'}
-                    </button>
-                )}
+                <button
+                    onClick={serverStatus === "running" ? onStopServer : onStartServer}
+                    disabled={isTransitioning || (serverStatus === "stopped" && isPortAvailable === false)}
+                    className="rounded-[10px] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ backgroundColor: serverStatus === "running" ? colors.error : colors.accent }}
+                >
+                    {isTransitioning ? runtimeStateLabel : serverStatus === "running" ? "Stop" : "Start"}
+                </button>
             </div>
         </header>
     );
